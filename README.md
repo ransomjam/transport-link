@@ -91,8 +91,32 @@ Change these values before using any shared or deployed environment.
 - `GET /api/shipments/:id`
 - `PUT /api/shipments/:id`
 - `POST /api/shipments/:id/history`
+- `POST /api/shipments/:id/movement`
 - `GET /api/track/:trackingId`
 - `GET /api/dashboard/stats`
+
+## Route & Movement Model
+
+Shipment position is **estimated from time along a fixed road route**, not live GPS.
+
+- When a shipment is created or its origin/destination changes, the API builds a
+  road route between the two endpoints (via `OSRM_URL`) and caches the polyline
+  on the shipment (`route_geometry`). If the routing server is unreachable, it
+  falls back to a direct geodesic line, so the feature never breaks.
+- Endpoint coordinates are taken from the admin-entered lat/lng, or resolved
+  from the place names via a built-in gazetteer when left blank.
+- The package's current position is interpolated along that route by elapsed
+  time between the departure and expected-delivery dates. It is computed on read
+  (no background job) and animated smoothly on the public map. Because the
+  marker rides the cached route, it always stays on real roads and never detours
+  through an off-corridor "current location".
+- Admins control the timeline from the shipment detail page **Movement Control**
+  panel (also `POST /api/shipments/:id/movement`):
+  - `advanceHours` (positive or negative) nudges the package forward/back in time.
+  - `reset` returns it to real time and re-enables auto-advance.
+  - `autoProgress: false` pauses movement and pins the package to the manual
+    Current Location coordinates; `true` resumes time-based movement.
+  - `markDelivered` jumps it to the destination and marks it delivered.
 
 ## Notes
 

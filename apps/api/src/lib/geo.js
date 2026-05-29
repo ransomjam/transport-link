@@ -20,6 +20,24 @@ export function isValidCoordinate(lat, lng) {
   );
 }
 
+// Parse a lat/lng pair, treating null/undefined/empty as "no coordinate".
+// (Number(null) is 0, which would otherwise validate as a real point.)
+export function toLatLng(latRaw, lngRaw) {
+  if (
+    latRaw === null ||
+    latRaw === undefined ||
+    latRaw === "" ||
+    lngRaw === null ||
+    lngRaw === undefined ||
+    lngRaw === ""
+  ) {
+    return null;
+  }
+  const lat = Number(latRaw);
+  const lng = Number(lngRaw);
+  return isValidCoordinate(lat, lng) ? { lat, lng } : null;
+}
+
 // Great-circle distance in metres between two [lat, lng] points.
 export function haversineMeters([lat1, lng1], [lat2, lng2]) {
   const dLat = toRadians(lat2 - lat1);

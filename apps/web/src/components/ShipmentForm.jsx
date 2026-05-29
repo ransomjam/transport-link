@@ -112,7 +112,7 @@ export default function ShipmentForm({ shipment, loading = false, onSubmit, subm
         </div>
       </FormSection>
 
-      <FormSection title="Map Coordinates, Optional">
+      <FormSection title="Map Coordinates & Movement, Optional">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <Field name="originLat" label="Origin Latitude" type="number" step="any" defaultValue={shipment?.originLat ?? ""} />
           <Field name="originLng" label="Origin Longitude" type="number" step="any" defaultValue={shipment?.originLng ?? ""} />
@@ -120,7 +120,17 @@ export default function ShipmentForm({ shipment, loading = false, onSubmit, subm
           <Field name="destinationLng" label="Destination Longitude" type="number" step="any" defaultValue={shipment?.destinationLng ?? ""} />
           <Field name="currentLocationLat" label="Current Location Latitude" type="number" step="any" defaultValue={shipment?.currentLocationLat ?? ""} />
           <Field name="currentLocationLng" label="Current Location Longitude" type="number" step="any" defaultValue={shipment?.currentLocationLng ?? ""} />
+          <Select
+            name="autoProgress"
+            label="Auto-Advance Position"
+            defaultValue={String(shipment?.autoProgress ?? true)}
+            options={[
+              ["true", "On — moves along route over time"],
+              ["false", "Off — pin to current coordinates"]
+            ]}
+          />
         </div>
+        <ReadOnlyHint text="Leave coordinates blank to resolve them from the origin/destination names. When Auto-Advance is On, the package position is calculated along the road route from the departure to the expected delivery time; the Current Location coordinates are only used when it is Off." />
       </FormSection>
 
       <FormSection title="Notes">

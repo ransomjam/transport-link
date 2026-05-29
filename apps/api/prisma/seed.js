@@ -1,12 +1,34 @@
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
+import { buildRoute, resolveEndpoint } from "../src/lib/route.js";
 
 const prisma = new PrismaClient();
 
 const adminEmail = process.env.SEED_ADMIN_EMAIL ?? "admin@goodstracking.local";
 const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "AdminPass123!";
 
-async function upsertShipment(admin, shipment, history, packages = []) {
+// Resolve endpoints and build the cached road route, mirroring the API so
+// seeded shipments behave exactly like admin-created ones.
+async function withRoute(shipment) {
+  const start = resolveEndpoint(shipment.originLat, shipment.originLng, shipment.origin);
+  const end = resolveEndpoint(shipment.destinationLat, shipment.destinationLng, shipment.destination);
+  const route = await buildRoute(start, end);
+
+  return {
+    ...shipment,
+    originLat: shipment.originLat ?? start?.lat ?? null,
+    originLng: shipment.originLng ?? start?.lng ?? null,
+    destinationLat: shipment.destinationLat ?? end?.lat ?? null,
+    destinationLng: shipment.destinationLng ?? end?.lng ?? null,
+    routeGeometry: route?.geometry ?? null,
+    routeDistanceM: route?.distanceM ?? null,
+    routeDurationS: route?.durationS ?? null,
+    routeProvider: route?.provider ?? null
+  };
+}
+
+async function upsertShipment(admin, rawShipment, history, packages = []) {
+  const shipment = await withRoute(rawShipment);
   const record = await prisma.shipment.upsert({
     where: { trackingId: shipment.trackingId },
     update: {
@@ -45,8 +67,15 @@ async function upsertShipment(admin, shipment, history, packages = []) {
   }
 }
 
+const HOUR = 60 * 60 * 1000;
+
 async function main() {
   const passwordHash = await bcrypt.hash(adminPassword, 12);
+  // Anchor the demo shipment around "now" so it is visibly mid-route.
+  const now = Date.now();
+  const demoDeparture = new Date(now - 18 * HOUR);
+  const demoPickup = new Date(now - 20 * HOUR);
+  const demoEta = new Date(now + 30 * HOUR);
   const admin = await prisma.user.upsert({
     where: { email: adminEmail },
     update: {
@@ -76,39 +105,48 @@ async function main() {
       receiverAddress: "609 General Senter Drive, Midwest City, Oklahoma 73110",
       origin: "Garden City, KS",
       destination: "Midwest City, Oklahoma",
-      currentLocation: "Edmonton, Canada",
+      currentLocation: null,
       originLat: 37.9717,
       originLng: -100.8727,
       destinationLat: 35.4495,
       destinationLng: -97.3967,
-      currentLocationLat: 53.5461,
-      currentLocationLng: -113.4938,
-      currentStatus: "ON_HOLD",
+      currentLocationLat: null,
+      currentLocationLng: null,
+      autoProgress: true,
+      clockOffsetMinutes: 0,
+      currentStatus: "IN_TRANSIT",
       shipmentType: "Cargo",
       packageDescription: "Mazda RX7 FB wing and rear axle",
       carrier: "DHL",
-      shipmentMode: "Air Freight",
+      shipmentMode: "Ground Freight",
       weight: "65kg",
       quantity: 2,
       paymentMode: "Zelle",
       totalFreight: "1",
-      pickupDate: new Date("2026-05-11T00:00:00.000Z"),
+      pickupDate: demoPickup,
       pickupTime: "10:15",
-      departureDate: new Date("2026-05-11T15:40:00.000Z"),
+      departureDate: demoDeparture,
       departureTime: "13:15",
-      estimatedDeliveryDate: new Date("2026-05-14T18:00:00.000Z"),
-      progressPercentage: 35,
-      publicNote: "Your package will be on road once every delivery requirements are completed.",
-      comments: "Your package will be on road once every delivery requirements are completed.",
-      adminNote: "On hold pending completion of delivery requirements."
+      estimatedDeliveryDate: demoEta,
+      progressPercentage: 38,
+      publicNote: "Your package is in transit toward the destination.",
+      comments: "Your package is in transit toward the destination.",
+      adminNote: "Auto-advancing along the road route between origin and destination."
     },
     [
       {
+        status: "PICKED_UP",
+        location: "Garden City, KS",
+        note: "Shipment has been picked up and departed origin.",
+        visibility: "public",
+        createdAt: demoDeparture
+      },
+      {
         status: "IN_TRANSIT",
-        location: "Edmonton, Canada",
+        location: "In transit",
         note: "Shipment is in transit to the next sorting point.",
         visibility: "public",
-        createdAt: new Date("2026-05-11T15:40:00.000Z")
+        createdAt: new Date(now - 6 * HOUR)
       }
     ],
     [

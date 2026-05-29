@@ -14,6 +14,8 @@ export default function ShipmentDetailPage() {
   const [shipment, setShipment] = useState(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [hoursInput, setHoursInput] = useState("");
+  const [movementBusy, setMovementBusy] = useState(false);
 
   async function loadShipment() {
     setError("");
@@ -46,6 +48,26 @@ export default function ShipmentDetailPage() {
       await loadShipment();
     } catch (issue) {
       setError(issue.message);
+    }
+  }
+
+  async function sendMovement(body) {
+    setError("");
+    setMessage("");
+    setMovementBusy(true);
+
+    try {
+      const data = await apiRequest(`/shipments/${id}/movement`, {
+        method: "POST",
+        body
+      });
+      setShipment((current) => ({ ...current, ...data.shipment }));
+      setMessage("Movement updated.");
+      await loadShipment();
+    } catch (issue) {
+      setError(issue.message);
+    } finally {
+      setMovementBusy(false);
     }
   }
 
@@ -91,6 +113,14 @@ export default function ShipmentDetailPage() {
               <Metric label="Progress" value={`${shipment.progressPercentage}%`} />
               <Metric label="Estimated delivery" value={formatDate(shipment.estimatedDeliveryDate)} />
             </section>
+
+            <MovementControl
+              shipment={shipment}
+              busy={movementBusy}
+              hoursInput={hoursInput}
+              setHoursInput={setHoursInput}
+              onMove={sendMovement}
+            />
 
             <section className="rounded-md bg-white p-5 shadow-sm ring-1 ring-slate-200">
               <h2 className="mb-4 text-lg font-semibold text-ink">Shipment Details</h2>
@@ -171,6 +201,102 @@ export default function ShipmentDetailPage() {
         )}
       </AdminLayout>
     </AdminGuard>
+  );
+}
+
+function MovementControl({ shipment, busy, hoursInput, setHoursInput, onMove }) {
+  const movement = shipment.movement ?? {};
+  const autoProgress = shipment.autoProgress !== false;
+  const offsetHours = (shipment.clockOffsetMinutes ?? 0) / 60;
+  const percent = Math.round((movement.fraction ?? 0) * 100);
+  const distanceKm = Number.isFinite(movement.distanceM) ? (movement.distanceM / 1000).toFixed(0) : null;
+  const provider = movement.provider === "osrm" ? "Road route" : movement.provider === "geodesic" ? "Direct line (routing offline)" : "—";
+
+  function applyCustomHours() {
+    const value = Number(hoursInput);
+    if (!Number.isFinite(value) || value === 0) {
+      return;
+    }
+    onMove({ advanceHours: value });
+    setHoursInput("");
+  }
+
+  return (
+    <section className="rounded-md bg-white p-5 shadow-sm ring-1 ring-slate-200">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-ink">Movement Control</h2>
+        <span
+          className={`rounded-full px-3 py-1 text-xs font-semibold ${
+            autoProgress ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+          }`}
+        >
+          {autoProgress ? "Auto-advancing" : "Paused (pinned)"}
+        </span>
+      </div>
+
+      <div className="mb-4 grid gap-3 text-sm md:grid-cols-4">
+        <Info label="Position label" value={movement.label ?? shipment.currentLocation ?? "Not set"} />
+        <Info label="Along route" value={`${percent}%`} />
+        <Info label="Time shift" value={offsetHours === 0 ? "Live (no shift)" : `${offsetHours > 0 ? "+" : ""}${offsetHours} h`} />
+        <Info label="Route" value={distanceKm ? `${provider} · ${distanceKm} km` : provider} />
+      </div>
+
+      <p className="mb-3 text-sm text-slate-600">
+        Move the package forward or back in time. Auto-advance interpolates its position along the road route between the
+        departure and expected delivery times.
+      </p>
+
+      <div className="flex flex-wrap gap-2">
+        <MoveButton disabled={busy} onClick={() => onMove({ advanceHours: 6 })}>+6 hours</MoveButton>
+        <MoveButton disabled={busy} onClick={() => onMove({ advanceHours: 12 })}>+12 hours</MoveButton>
+        <MoveButton disabled={busy} onClick={() => onMove({ advanceHours: 24 })}>+1 day</MoveButton>
+        <MoveButton disabled={busy} onClick={() => onMove({ advanceHours: -6 })}>-6 hours</MoveButton>
+        <MoveButton disabled={busy} onClick={() => onMove({ advanceHours: -24 })}>-1 day</MoveButton>
+        <MoveButton disabled={busy} onClick={() => onMove({ reset: true })}>Reset to live</MoveButton>
+        {autoProgress ? (
+          <MoveButton disabled={busy} onClick={() => onMove({ autoProgress: false })}>Pause</MoveButton>
+        ) : (
+          <MoveButton disabled={busy} onClick={() => onMove({ autoProgress: true })}>Resume</MoveButton>
+        )}
+        <MoveButton disabled={busy || shipment.currentStatus === "DELIVERED"} onClick={() => onMove({ markDelivered: true })} tone="dark">
+          Mark delivered
+        </MoveButton>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-end gap-3">
+        <label className="grid gap-2 text-sm font-medium text-slate-700">
+          Custom shift (hours, negative to rewind)
+          <input
+            type="number"
+            step="any"
+            value={hoursInput}
+            onChange={(event) => setHoursInput(event.target.value)}
+            placeholder="e.g. 8 or -3"
+            className="min-h-10 w-56 rounded-md border border-slate-300 px-3 py-2 text-base outline-none focus:border-signal"
+          />
+        </label>
+        <button
+          type="button"
+          disabled={busy || !hoursInput}
+          onClick={applyCustomHours}
+          className="min-h-10 rounded-md bg-signal px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+        >
+          Apply shift
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function MoveButton({ children, onClick, disabled, tone = "light" }) {
+  const styles =
+    tone === "dark"
+      ? "bg-ink text-white hover:bg-signal"
+      : "border border-slate-300 text-slate-700 hover:border-signal hover:text-signal";
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} className={`rounded-md px-3 py-2 text-sm font-semibold disabled:opacity-60 ${styles}`}>
+      {children}
+    </button>
   );
 }
 

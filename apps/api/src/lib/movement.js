@@ -5,9 +5,9 @@
 
 import {
   interpolateGreatCircle,
-  isValidCoordinate,
   nearestPlaceLabel,
-  pointAtFraction
+  pointAtFraction,
+  toLatLng
 } from "./geo.js";
 
 // Statuses where the package is actively moving between origin and destination.
@@ -89,15 +89,11 @@ function getRouteGeometry(shipment) {
 }
 
 function manualPosition(shipment) {
-  const lat = Number(shipment.currentLocationLat);
-  const lng = Number(shipment.currentLocationLng);
-  return isValidCoordinate(lat, lng) ? { lat, lng } : null;
+  return toLatLng(shipment.currentLocationLat, shipment.currentLocationLng);
 }
 
 function endpointPosition(shipment, key) {
-  const lat = Number(shipment[`${key}Lat`]);
-  const lng = Number(shipment[`${key}Lng`]);
-  return isValidCoordinate(lat, lng) ? { lat, lng } : null;
+  return toLatLng(shipment[`${key}Lat`], shipment[`${key}Lng`]);
 }
 
 // Human-readable label for a moving package. When auto-progress is paused we

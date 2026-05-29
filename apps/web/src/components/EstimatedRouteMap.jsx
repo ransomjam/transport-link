@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
 
 const MAP_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 const ROUTING_HOST = "router.project-osrm.org";
 
+// Fallback gazetteer used only when a shipment has no stored coordinates or
+// route geometry (legacy records). The server is the source of truth otherwise.
 const LOCATION_COORDINATES = {
   "atlanta georgia": { lat: 33.749, lng: -84.388 },
   "chicago illinois": { lat: 41.8781, lng: -87.6298 },
@@ -25,108 +27,107 @@ const POINT_STYLES = {
   destination: { color: "#0F2742", shortLabel: "D" }
 };
 
-const COORDINATE_FIELDS = {
-  origin: {
-    objects: ["originCoordinates", "originCoordinate", "originCoords", "originLocation"],
-    pairs: [
-      ["originLatitude", "originLongitude"],
-      ["originLat", "originLng"],
-      ["originLat", "originLon"]
-    ]
-  },
-  current: {
-    objects: [
-      "currentLocationCoordinates",
-      "currentLocationCoordinate",
-      "currentCoordinates",
-      "currentCoordinate",
-      "lastUpdatedLocationCoordinates",
-      "lastUpdatedLocationCoordinate",
-      "lastLocationCoordinates"
-    ],
-    pairs: [
-      ["currentLocationLat", "currentLocationLng"],
-      ["currentLatitude", "currentLongitude"],
-      ["currentLat", "currentLng"],
-      ["currentLat", "currentLon"],
-      ["lastUpdatedLatitude", "lastUpdatedLongitude"],
-      ["lastUpdatedLat", "lastUpdatedLng"],
-      ["lastLocationLat", "lastLocationLng"]
-    ]
-  },
-  destination: {
-    objects: ["destinationCoordinates", "destinationCoordinate", "destinationCoords", "destinationLocation"],
-    pairs: [
-      ["destinationLatitude", "destinationLongitude"],
-      ["destinationLat", "destinationLng"],
-      ["destinationLat", "destinationLon"]
-    ]
-  }
-};
-
 export default function EstimatedRouteMap({ shipment }) {
-  const route = useMemo(() => buildRoute(shipment), [shipment]);
-  const routeLine = useMemo(() => route.points.map((point) => point.position), [route.points]);
-  const markerPoints = useMemo(() => [...route.points].sort((a, b) => (a.key === "current" ? 1 : b.key === "current" ? -1 : 0)), [route.points]);
-  const routeKey = useMemo(() => routeLine.map(([lat, lng]) => `${lat.toFixed(5)},${lng.toFixed(5)}`).join("|"), [routeLine]);
-  const [roadRoute, setRoadRoute] = useState({ status: "idle", positions: [] });
-  const center = useMemo(() => getCenter(route.points), [route.points]);
-  const mapBoundsPositions = roadRoute.positions.length ? roadRoute.positions : routeLine;
+  const endpoints = useMemo(() => resolveEndpoints(shipment), [shipment]);
+  const storedGeometry = useMemo(() => normalizeGeometry(shipment?.routeGeometry), [shipment?.routeGeometry]);
+
+  // The route polyline: prefer the server-computed road route, otherwise fetch
+  // a road route between the two endpoints, otherwise a straight line.
+  const [fetchedRoute, setFetchedRoute] = useState({ status: "idle", positions: [] });
+  const endpointKey = useMemo(() => endpointsKey(endpoints), [endpoints]);
 
   useEffect(() => {
-    const waypoints = uniquePositions(routeLine);
-
-    if (waypoints.length < 2) {
-      setRoadRoute({ status: "idle", positions: [] });
-      return;
+    if (storedGeometry.length > 1) {
+      setFetchedRoute({ status: "idle", positions: [] });
+      return undefined;
     }
 
-    const cachedRoute = readCachedRoadRoute(routeKey);
+    if (!endpoints.origin || !endpoints.destination) {
+      setFetchedRoute({ status: "idle", positions: [] });
+      return undefined;
+    }
 
-    if (cachedRoute.length) {
-      setRoadRoute({ status: "ready", positions: cachedRoute });
-      return;
+    const cached = readCachedRoadRoute(endpointKey);
+    if (cached.length) {
+      setFetchedRoute({ status: "ready", positions: cached });
+      return undefined;
     }
 
     const controller = new AbortController();
-    setRoadRoute({ status: "loading", positions: [] });
+    setFetchedRoute({ status: "loading", positions: [] });
 
-    loadRoadRoute(waypoints, controller.signal)
+    loadRoadRoute([endpoints.origin, endpoints.destination], controller.signal)
       .then((positions) => {
-        writeCachedRoadRoute(routeKey, positions);
-        setRoadRoute({ status: positions.length ? "ready" : "unavailable", positions });
+        writeCachedRoadRoute(endpointKey, positions);
+        setFetchedRoute({ status: positions.length ? "ready" : "unavailable", positions });
       })
       .catch((error) => {
         if (error.name !== "AbortError") {
-          setRoadRoute({ status: "unavailable", positions: [] });
+          setFetchedRoute({ status: "unavailable", positions: [] });
         }
       });
 
     return () => controller.abort();
-  }, [routeKey]);
+  }, [endpointKey, storedGeometry.length]);
 
-  if (!route.points.length) {
-    return <FallbackRouteCard summaries={route.summaries} />;
+  const routeLine = useMemo(() => {
+    if (storedGeometry.length > 1) {
+      return storedGeometry;
+    }
+    if (fetchedRoute.positions.length > 1) {
+      return fetchedRoute.positions;
+    }
+    if (endpoints.origin && endpoints.destination) {
+      return [endpoints.origin, endpoints.destination];
+    }
+    return [];
+  }, [storedGeometry, fetchedRoute.positions, endpoints]);
+
+  // Live position of the package, animated client-side from the server window.
+  const liveFraction = useLiveFraction(shipment?.movement);
+  const currentPos = useMemo(
+    () => resolveCurrentPosition(shipment, routeLine, liveFraction, endpoints),
+    [shipment, routeLine, liveFraction, endpoints]
+  );
+
+  const summaries = useMemo(() => buildSummaries(shipment), [shipment]);
+  const markers = useMemo(
+    () => buildMarkers(endpoints, currentPos, summaries),
+    [endpoints, currentPos, summaries]
+  );
+
+  const boundsPositions = useMemo(() => {
+    const points = [...routeLine];
+    if (currentPos) {
+      points.push(currentPos);
+    }
+    return points;
+  }, [routeLine, currentPos]);
+
+  if (!markers.length) {
+    return <FallbackRouteCard summaries={summaries} />;
   }
+
+  const center = boundsPositions[0] ?? [39.5, -98.35];
 
   return (
     <div className="space-y-4">
       <div className="h-[360px] overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-200 md:h-[420px]">
-        <MapContainer center={center} zoom={route.points.length > 1 ? 6 : 7} className="h-full w-full" preferCanvas scrollWheelZoom={false} attributionControl={false}>
+        <MapContainer center={center} zoom={6} className="h-full w-full" preferCanvas scrollWheelZoom={false} attributionControl={false}>
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url={MAP_TILE_URL}
             updateWhenIdle={false}
             updateWhenZooming={false}
           />
-          <FitMapToRoute positions={mapBoundsPositions} />
-          {roadRoute.positions.length > 1 ? (
+          <FitMapToRoute positions={boundsPositions} />
+          {routeLine.length > 1 ? (
             <>
-              <Polyline positions={roadRoute.positions} pathOptions={{ color: "#ffffff", opacity: 0.98, weight: 10 }} />
-              <Polyline positions={roadRoute.positions} pathOptions={{ color: "#1A73E8", opacity: 0.96, weight: 6 }} />
+              <Polyline positions={routeLine} pathOptions={{ color: "#ffffff", opacity: 0.98, weight: 10 }} />
+              <Polyline positions={routeLine} pathOptions={{ color: "#1A73E8", opacity: 0.96, weight: 6 }} />
             </>
           ) : null}
-          {markerPoints.map((point) => (
+          {markers.map((point) => (
             <Marker key={point.key} icon={createMarkerIcon(point)} position={point.position}>
               <Popup>
                 <div className="min-w-32">
@@ -139,17 +140,17 @@ export default function EstimatedRouteMap({ shipment }) {
         </MapContainer>
       </div>
 
-      {roadRoute.status === "unavailable" && routeLine.length > 1 ? (
+      {fetchedRoute.status === "unavailable" && routeLine.length > 1 ? (
         <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-amber-200">
-          Estimated road route is unavailable for these coordinates right now.
+          Showing a direct route line; the detailed road route is temporarily unavailable.
         </p>
       ) : null}
 
-      <RouteSummary summaries={route.summaries} />
+      <RouteSummary summaries={summaries} />
 
       <a
         className="inline-flex w-fit text-sm font-semibold text-[#049DBF] transition hover:text-[#0F2742]"
-        href={openStreetMapHref(route.points)}
+        href={openStreetMapHref(currentPos ?? endpoints.origin ?? endpoints.destination)}
         target="_blank"
         rel="noreferrer"
       >
@@ -157,6 +158,69 @@ export default function EstimatedRouteMap({ shipment }) {
       </a>
     </div>
   );
+}
+
+// Recompute the journey fraction every second from the server-provided window
+// so the marker glides along the route in real time between data refreshes.
+function useLiveFraction(movement) {
+  const [fraction, setFraction] = useState(() => (movement ? clamp01(movement.fraction ?? 0) : 0));
+  // Offset between the client clock and the server clock, captured once.
+  const skewRef = useRef(0);
+
+  useEffect(() => {
+    if (!movement) {
+      return undefined;
+    }
+
+    if (Number.isFinite(movement.serverNowMs)) {
+      skewRef.current = movement.serverNowMs - Date.now();
+    }
+
+    const compute = () => {
+      const { effectiveDepartureMs, effectiveEtaMs, animating } = movement;
+      if (!animating || !Number.isFinite(effectiveDepartureMs) || !Number.isFinite(effectiveEtaMs) || effectiveEtaMs <= effectiveDepartureMs) {
+        return clamp01(movement.fraction ?? 0);
+      }
+      const serverNow = Date.now() + skewRef.current;
+      return clamp01((serverNow - effectiveDepartureMs) / (effectiveEtaMs - effectiveDepartureMs));
+    };
+
+    setFraction(compute());
+
+    if (!movement.animating) {
+      return undefined;
+    }
+
+    const timer = setInterval(() => setFraction(compute()), 1000);
+    return () => clearInterval(timer);
+  }, [movement]);
+
+  return fraction;
+}
+
+function resolveCurrentPosition(shipment, routeLine, liveFraction, endpoints) {
+  const movement = shipment?.movement;
+
+  // Auto-progressing shipments are placed along the route at the live fraction.
+  if (movement?.animating && routeLine.length > 1) {
+    return pointAtFraction(routeLine, liveFraction);
+  }
+
+  // Otherwise use the server-computed position when available.
+  const fromServer = toPosition(movement?.lat, movement?.lng) ?? toPosition(shipment?.currentLocationLat, shipment?.currentLocationLng);
+  if (fromServer) {
+    return fromServer;
+  }
+
+  if (routeLine.length > 1) {
+    return pointAtFraction(routeLine, clamp01(movement?.fraction ?? 0));
+  }
+
+  if (endpoints.origin && endpoints.destination) {
+    return lerp(endpoints.origin, endpoints.destination, clamp01(movement?.fraction ?? 0));
+  }
+
+  return null;
 }
 
 function FitMapToRoute({ positions }) {
@@ -208,29 +272,12 @@ function RouteSummary({ summaries, className = "" }) {
   );
 }
 
-function buildRoute(shipment) {
-  const summaries = [
-    createSummary("origin", "Origin", shipment.origin),
-    createSummary("current", "Last Updated Location", shipment.currentLocation),
-    createSummary("destination", "Destination", shipment.destination)
+function buildSummaries(shipment) {
+  return [
+    createSummary("origin", "Origin", shipment?.origin),
+    createSummary("current", "Last Updated Location", shipment?.currentLocation),
+    createSummary("destination", "Destination", shipment?.destination)
   ];
-
-  const points = summaries
-    .map((summary) => {
-      const coordinate = getShipmentCoordinate(shipment, summary.key);
-
-      if (!coordinate) {
-        return null;
-      }
-
-      return {
-        ...summary,
-        position: [coordinate.lat, coordinate.lng]
-      };
-    })
-    .filter(Boolean);
-
-  return { points, summaries };
 }
 
 function createSummary(key, label, value) {
@@ -243,61 +290,117 @@ function createSummary(key, label, value) {
   };
 }
 
-function getShipmentCoordinate(shipment, pointKey) {
-  const fields = COORDINATE_FIELDS[pointKey];
+function buildMarkers(endpoints, currentPos, summaries) {
+  const byKey = Object.fromEntries(summaries.map((summary) => [summary.key, summary]));
+  const markers = [];
 
-  for (const field of fields.objects) {
-    const coordinate = normalizeCoordinate(shipment?.[field]);
-
-    if (coordinate) {
-      return coordinate;
-    }
+  if (endpoints.origin) {
+    markers.push({ ...byKey.origin, position: endpoints.origin });
+  }
+  if (endpoints.destination) {
+    markers.push({ ...byKey.destination, position: endpoints.destination });
+  }
+  // Draw the current-location marker last so it sits above the endpoints.
+  if (currentPos) {
+    markers.push({ ...byKey.current, position: currentPos });
   }
 
-  for (const [latField, lngField] of fields.pairs) {
-    const coordinate = toCoordinate(shipment?.[latField], shipment?.[lngField]);
-
-    if (coordinate) {
-      return coordinate;
-    }
-  }
-
-  return lookupCoordinate(getLocationLabel(shipment, pointKey));
+  return markers;
 }
 
-function normalizeCoordinate(value) {
-  if (!value) {
-    return null;
-  }
+function resolveEndpoints(shipment) {
+  const geometry = normalizeGeometry(shipment?.routeGeometry);
 
-  if (Array.isArray(value)) {
-    return toCoordinate(value[0], value[1]);
-  }
+  const origin =
+    toPosition(shipment?.originLat, shipment?.originLng) ??
+    (geometry.length ? geometry[0] : null) ??
+    lookupCoordinate(shipment?.origin);
 
-  if (typeof value !== "object") {
-    return null;
-  }
+  const destination =
+    toPosition(shipment?.destinationLat, shipment?.destinationLng) ??
+    (geometry.length ? geometry[geometry.length - 1] : null) ??
+    lookupCoordinate(shipment?.destination);
 
-  if (value.type === "Point" && Array.isArray(value.coordinates)) {
-    return toCoordinate(value.coordinates[1], value.coordinates[0]);
-  }
-
-  if (Array.isArray(value.coordinates)) {
-    return toCoordinate(value.coordinates[0], value.coordinates[1]);
-  }
-
-  return toCoordinate(value.lat ?? value.latitude, value.lng ?? value.lon ?? value.longitude);
+  return { origin, destination };
 }
 
-function toCoordinate(latValue, lngValue) {
+function normalizeGeometry(geometry) {
+  if (!Array.isArray(geometry)) {
+    return [];
+  }
+  return geometry
+    .map((point) => (Array.isArray(point) ? toPosition(point[0], point[1]) : null))
+    .filter(Boolean);
+}
+
+function toPosition(latValue, lngValue) {
+  // Treat null/undefined/empty as "no coordinate" — Number(null) is 0, which
+  // would otherwise validate as a real point off the coast of Africa.
+  if (latValue === null || latValue === undefined || latValue === "" || lngValue === null || lngValue === undefined || lngValue === "") {
+    return null;
+  }
   const lat = Number(latValue);
   const lng = Number(lngValue);
-
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
     return null;
   }
+  return [lat, lng];
+}
 
-  return { lat, lng };
+function clamp01(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(1, n));
+}
+
+function lerp(a, b, t) {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
+function haversine(a, b) {
+  const toRad = (v) => (v * Math.PI) / 180;
+  const dLat = toRad(b[0] - a[0]);
+  const dLng = toRad(b[1] - a[1]);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+// Point that lies `fraction` of the way along a polyline by arc length.
+function pointAtFraction(points, fraction) {
+  if (!points.length) {
+    return null;
+  }
+  if (points.length === 1) {
+    return points[0];
+  }
+
+  const t = clamp01(fraction);
+  const distances = [0];
+  for (let i = 1; i < points.length; i += 1) {
+    distances[i] = distances[i - 1] + haversine(points[i - 1], points[i]);
+  }
+  const total = distances[distances.length - 1];
+  if (total === 0) {
+    return points[0];
+  }
+  if (t <= 0) {
+    return points[0];
+  }
+  if (t >= 1) {
+    return points[points.length - 1];
+  }
+
+  const target = t * total;
+  let segment = 1;
+  while (segment < distances.length - 1 && distances[segment] < target) {
+    segment += 1;
+  }
+  const segStart = distances[segment - 1];
+  const segLen = distances[segment] - segStart;
+  const localT = segLen === 0 ? 0 : (target - segStart) / segLen;
+  return lerp(points[segment - 1], points[segment], localT);
 }
 
 async function loadRoadRoute(positions, signal) {
@@ -307,7 +410,7 @@ async function loadRoadRoute(positions, signal) {
     geometries: "geojson",
     steps: "false",
     alternatives: "false",
-    continue_straight: "false"
+    continue_straight: "true"
   });
   const response = await fetch(`${getRoutingEndpoint()}/${coordinates}?${params}`, { signal });
 
@@ -322,10 +425,7 @@ async function loadRoadRoute(positions, signal) {
     return [];
   }
 
-  return route
-    .map(([lng, lat]) => toCoordinate(lat, lng))
-    .filter(Boolean)
-    .map((point) => [point.lat, point.lng]);
+  return route.map(([lng, lat]) => toPosition(lat, lng)).filter(Boolean);
 }
 
 function getRoutingEndpoint() {
@@ -340,11 +440,9 @@ function readCachedRoadRoute(routeKey) {
 
   try {
     const cached = JSON.parse(window.localStorage.getItem(`road-route:${routeKey}`) ?? "[]");
-
     if (!Array.isArray(cached)) {
       return [];
     }
-
     return cached.filter((position) => Array.isArray(position) && position.length === 2 && position.every(Number.isFinite));
   } catch {
     return [];
@@ -363,46 +461,22 @@ function writeCachedRoadRoute(routeKey, positions) {
   }
 }
 
-function uniquePositions(positions) {
-  const seen = new Set();
-
-  return positions.filter(([lat, lng]) => {
-    const key = `${lat.toFixed(5)},${lng.toFixed(5)}`;
-
-    if (seen.has(key)) {
-      return false;
-    }
-
-    seen.add(key);
-    return true;
-  });
-}
-
-function getLocationLabel(shipment, pointKey) {
-  if (pointKey === "origin") {
-    return shipment?.origin;
-  }
-
-  if (pointKey === "destination") {
-    return shipment?.destination;
-  }
-
-  return shipment?.currentLocation;
+function endpointsKey(endpoints) {
+  const fmt = (p) => (p ? `${p[0].toFixed(5)},${p[1].toFixed(5)}` : "-");
+  return `${fmt(endpoints.origin)}|${fmt(endpoints.destination)}`;
 }
 
 function lookupCoordinate(location) {
   const normalized = normalizeLocationName(location);
-
   if (!normalized) {
     return null;
   }
-
   if (LOCATION_COORDINATES[normalized]) {
-    return LOCATION_COORDINATES[normalized];
+    const { lat, lng } = LOCATION_COORDINATES[normalized];
+    return [lat, lng];
   }
-
   const match = Object.entries(LOCATION_COORDINATES).find(([key]) => normalized.includes(key) || key.includes(normalized));
-  return match?.[1] ?? null;
+  return match ? [match[1].lat, match[1].lng] : null;
 }
 
 function normalizeLocationName(location) {
@@ -415,22 +489,6 @@ function normalizeLocationName(location) {
     .trim();
 }
 
-function getCenter(points) {
-  if (!points.length) {
-    return [39.5, -98.35];
-  }
-
-  const totals = points.reduce(
-    (sum, point) => ({
-      lat: sum.lat + point.position[0],
-      lng: sum.lng + point.position[1]
-    }),
-    { lat: 0, lng: 0 }
-  );
-
-  return [totals.lat / points.length, totals.lng / points.length];
-}
-
 function createMarkerIcon(point) {
   return L.divIcon({
     className: "",
@@ -441,9 +499,10 @@ function createMarkerIcon(point) {
   });
 }
 
-function openStreetMapHref(points) {
-  const point = points.find((item) => item.key === "current") ?? points[0];
-  const [lat, lng] = point.position;
-
+function openStreetMapHref(position) {
+  if (!position) {
+    return "https://www.openstreetmap.org/";
+  }
+  const [lat, lng] = position;
   return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=7/${lat}/${lng}`;
 }

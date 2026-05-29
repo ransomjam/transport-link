@@ -74,6 +74,10 @@ const optionalDate = z.preprocess((value) => {
 }, z.coerce.date().optional());
 
 const nullableInt = z.preprocess((value) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
   if (value === "" || value === null) {
     return null;
   }
@@ -82,6 +86,10 @@ const nullableInt = z.preprocess((value) => {
 }, z.number().int().nullable().optional());
 
 const nullableFloat = z.preprocess((value) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
   if (value === "" || value === null) {
     return null;
   }

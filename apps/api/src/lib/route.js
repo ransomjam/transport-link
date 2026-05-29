@@ -13,16 +13,14 @@ import {
   isValidCoordinate,
   lookupPlace,
   polylineLength,
-  sampleGreatCircle
+  sampleGreatCircle,
+  toLatLng
 } from "./geo.js";
 
 // Resolve an endpoint coordinate from explicit lat/lng, falling back to the
 // gazetteer using the free-text label.
 export function resolveEndpoint(lat, lng, label) {
-  if (isValidCoordinate(Number(lat), Number(lng))) {
-    return { lat: Number(lat), lng: Number(lng) };
-  }
-  return lookupPlace(label);
+  return toLatLng(lat, lng) ?? lookupPlace(label);
 }
 
 async function fetchOsrmRoute(start, end, signal) {
