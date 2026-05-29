@@ -1,11 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { apiRequest, clearToken } from "../lib/api";
 
 export default function AdminLayout({ children, title, action }) {
   const router = useRouter();
+  const pathname = usePathname();
+
+  const navItems = [
+    { href: "/admin/dashboard", label: "Dashboard" },
+    { href: "/admin/shipments", label: "Shipments" },
+    { href: "/admin/shipments/new", label: "Add Shipment" },
+    { href: "/admin/messages", label: "Messages" }
+  ];
+
+  function isActive(item) {
+    if (pathname === item.href) return true;
+    return item.href === "/admin/shipments" && pathname?.startsWith("/admin/shipments/") && pathname !== "/admin/shipments/new";
+  }
+
+  const activeNav = navItems.find(isActive)?.href ?? "";
 
   async function logout() {
     try {
@@ -25,18 +40,17 @@ export default function AdminLayout({ children, title, action }) {
           Goods Tracking
         </Link>
         <nav className="mt-8 grid gap-2 text-sm font-medium text-slate-700">
-          <Link className="rounded-md px-3 py-2 hover:bg-slate-100" href="/admin/dashboard">
-            Dashboard
-          </Link>
-          <Link className="rounded-md px-3 py-2 hover:bg-slate-100" href="/admin/shipments">
-            Shipments
-          </Link>
-          <Link className="rounded-md px-3 py-2 hover:bg-slate-100" href="/admin/shipments/new">
-            Add Shipment
-          </Link>
-          <Link className="rounded-md px-3 py-2 hover:bg-slate-100" href="/admin/messages">
-            Messages
-          </Link>
+          {navItems.map((item) => (
+            <Link
+              key={item.href}
+              className={`rounded-md px-3 py-2 ${
+                isActive(item) ? "bg-slate-100 text-ink" : "hover:bg-slate-100"
+              }`}
+              href={item.href}
+            >
+              {item.label}
+            </Link>
+          ))}
         </nav>
         <button
           onClick={logout}
@@ -47,16 +61,41 @@ export default function AdminLayout({ children, title, action }) {
       </aside>
 
       <div className="md:pl-64">
-        <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
-          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-normal text-signal">Admin</p>
-              <h1 className="text-2xl font-semibold text-ink">{title}</h1>
+        <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:px-5">
+          <div className="mx-auto flex max-w-6xl flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-normal text-signal">Admin</p>
+                <h1 className="truncate text-xl font-semibold text-ink sm:text-2xl">{title}</h1>
+              </div>
+              {action ? <div className="shrink-0">{action}</div> : null}
             </div>
-            {action}
+
+            <label className="sr-only" htmlFor="admin-mobile-navigation">
+              Admin navigation
+            </label>
+            <select
+              id="admin-mobile-navigation"
+              className="block w-full rounded-md border-2 border-signal bg-white px-3 py-2.5 text-sm font-semibold text-ink shadow-sm outline-none focus:ring-2 focus:ring-signal/30 md:hidden"
+              value={activeNav}
+              onChange={(event) => {
+                if (event.target.value) {
+                  router.push(event.target.value);
+                }
+              }}
+            >
+              <option value="" disabled>
+                Go to admin page
+              </option>
+              {navItems.map((item) => (
+                <option key={item.href} value={item.href}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
           </div>
         </header>
-        <main className="mx-auto max-w-6xl px-5 py-6">{children}</main>
+        <main className="mx-auto max-w-6xl px-4 py-4 sm:px-5 sm:py-6">{children}</main>
       </div>
     </div>
   );
