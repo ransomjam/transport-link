@@ -1,6 +1,6 @@
 "use client";
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
 
 export const shipmentStatuses = [
   ["SHIPMENT_CREATED", "Shipment Created"],
@@ -49,6 +49,10 @@ export function clearToken() {
 }
 
 export async function apiRequest(path, options = {}) {
+  if (!API_URL) {
+    throw new Error("NEXT_PUBLIC_API_URL is not configured.");
+  }
+
   const { method = "GET", body, auth = true } = options;
   const headers = {
     "Content-Type": "application/json"

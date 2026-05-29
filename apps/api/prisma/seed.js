@@ -6,6 +6,8 @@ const prisma = new PrismaClient();
 
 const adminEmail = process.env.SEED_ADMIN_EMAIL ?? "admin@goodstracking.local";
 const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "AdminPass123!";
+const isProduction = process.env.NODE_ENV === "production";
+const seedSampleData = process.env.SEED_SAMPLE_DATA === "true" || !isProduction;
 
 // Resolve endpoints and build the cached road route, mirroring the API so
 // seeded shipments behave exactly like admin-created ones.
@@ -76,20 +78,39 @@ async function main() {
   const demoDeparture = new Date(now - 18 * HOUR);
   const demoPickup = new Date(now - 20 * HOUR);
   const demoEta = new Date(now + 30 * HOUR);
-  const admin = await prisma.user.upsert({
-    where: { email: adminEmail },
-    update: {
-      name: "Super Admin",
-      passwordHash,
-      role: "super_admin"
-    },
-    create: {
-      name: "Super Admin",
-      email: adminEmail,
-      passwordHash,
-      role: "super_admin"
-    }
+  const existingAdmin = await prisma.user.findUnique({
+    where: { email: adminEmail }
   });
+
+  const admin =
+    existingAdmin && isProduction
+      ? existingAdmin
+      : await prisma.user.upsert({
+          where: { email: adminEmail },
+          update: {
+            name: "Super Admin",
+            passwordHash,
+            role: "super_admin"
+          },
+          create: {
+            name: "Super Admin",
+            email: adminEmail,
+            passwordHash,
+            role: "super_admin"
+          }
+        });
+
+  if (existingAdmin && isProduction) {
+    console.log(`Admin already exists: ${adminEmail}. Existing production password was not changed.`);
+  } else {
+    console.log(`Seeded super admin: ${adminEmail}`);
+    console.log(`Seeded password: ${adminPassword}`);
+  }
+
+  if (!seedSampleData) {
+    console.log("Skipped sample shipments. Set SEED_SAMPLE_DATA=true to create demo tracking records.");
+    return;
+  }
 
   await upsertShipment(
     admin,
@@ -208,8 +229,7 @@ async function main() {
     ]
   );
 
-  console.log(`Seeded super admin: ${adminEmail}`);
-  console.log(`Seeded password: ${adminPassword}`);
+  console.log("Seeded sample shipments.");
 }
 
 main()

@@ -53,6 +53,9 @@ Admin-controlled goods and shipment tracking website foundation. This first vers
    npm run prisma:migrate
    ```
 
+   Use `npm run prisma:migrate:dev` only when creating or editing migrations
+   during local development. Deployment uses `prisma migrate deploy`.
+
 5. Seed the super admin and sample shipments:
 
    ```bash
@@ -80,6 +83,100 @@ If Next.js starts on `http://localhost:3001` because port `3000` is already busy
 - Password: `AdminPass123!`
 
 Change these values before using any shared or deployed environment.
+
+## Free Deployment: Render + Supabase
+
+This app is ready for:
+
+- Frontend: Render Web Service
+- Backend: Render Web Service
+- Database: Supabase Free PostgreSQL
+
+The frontend is not configured as a Render Static Site because public tracking
+uses dynamic URLs like `/track/THX-2026-0001`; forcing Next.js static export
+would break arbitrary tracking links.
+
+### 1. Push to GitHub
+
+Push this repository to GitHub so Render can connect to it.
+
+### 2. Create Supabase Database
+
+Create a Supabase project, open the project database connection settings, and
+copy the PostgreSQL connection string. Use it as `DATABASE_URL`.
+
+### 3. Deploy Backend on Render
+
+Create a Render **Web Service**.
+
+- Root Directory: `apps/api`
+- Build Command: `npm install && npx prisma generate && npx prisma migrate deploy`
+- Start Command: `npm start`
+
+Backend environment variables:
+
+```bash
+DATABASE_URL=your-supabase-postgresql-connection-string
+JWT_SECRET=replace-with-a-long-random-secret
+FRONTEND_URL=https://your-frontend-service.onrender.com
+NODE_ENV=production
+PORT=4000
+```
+
+Render provides `PORT` at runtime; the API listens on `process.env.PORT`.
+
+Health check after deploy:
+
+```text
+https://your-backend-service.onrender.com/api/health
+```
+
+### 4. Deploy Frontend on Render
+
+Create a second Render **Web Service**.
+
+- Root Directory: `apps/web`
+- Build Command: `npm install && npm run build`
+- Start Command: `npm start`
+
+Frontend environment variable:
+
+```bash
+NEXT_PUBLIC_API_URL=https://your-backend-service.onrender.com
+```
+
+After the frontend URL is assigned, update the backend `FRONTEND_URL` value to
+that exact Render URL so CORS allows admin login, shipment creation, public
+tracking, and receipt download.
+
+### 5. Optional Seed
+
+Run seed only when you intentionally want to create a starter admin:
+
+```bash
+npm run prisma:seed
+```
+
+For production, the seed script does not overwrite an existing admin password
+and skips sample tracking records unless `SEED_SAMPLE_DATA=true` is set.
+
+Optional seed variables:
+
+```bash
+SEED_ADMIN_EMAIL=admin@example.com
+SEED_ADMIN_PASSWORD=replace-with-a-strong-password
+SEED_SAMPLE_DATA=true
+```
+
+### 6. Final Deployment Checks
+
+Test these URLs after Render finishes deploying:
+
+- Backend health: `https://your-backend-service.onrender.com/api/health`
+- Frontend: `https://your-frontend-service.onrender.com`
+- Admin login: `https://your-frontend-service.onrender.com/admin/login`
+- Public tracking: `https://your-frontend-service.onrender.com/track/THX-2026-0001`
+- Receipt download: `https://your-backend-service.onrender.com/api/track/THX-2026-0001/receipt`
 
 ## API Endpoints
 

@@ -12,8 +12,9 @@ import messagesRouter from "./routes/messages.routes.js";
 
 export const app = express();
 
-const allowedOrigins = env.CORS_ORIGIN.split(",")
-  .map((origin) => origin.trim())
+const configuredOrigins = [env.FRONTEND_URL, ...env.CORS_ORIGIN.split(",")];
+const allowedOrigins = configuredOrigins
+  .map((origin) => origin?.trim())
   .filter(Boolean);
 
 function isLocalDevelopmentOrigin(origin) {
