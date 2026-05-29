@@ -1,0 +1,14 @@
+node_modules/
+.next/
+dist/
+coverage/
+.env
+.env.local
+.env.*.local
+*.log
+Dockerfile.local
+tmp/
+.pgdata/
+.npm-cache/
+.claude/
+apps/web/photos and videos/

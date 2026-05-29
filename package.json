@@ -1,0 +1,32 @@
+{
+  "name": "goods-tracking-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Admin-controlled goods and shipment tracking website with estimated progress.",
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace @tracking/api\" \"npm run dev --workspace @tracking/web\"",
+    "dev:api": "npm run dev --workspace @tracking/api",
+    "dev:web": "npm run dev --workspace @tracking/web",
+    "build": "npm run build --workspace @tracking/api && npm run build --workspace @tracking/web",
+    "start:api": "npm run start --workspace @tracking/api",
+    "start:web": "npm run start --workspace @tracking/web",
+    "prisma:generate": "npm run prisma:generate --workspace @tracking/api",
+    "prisma:migrate": "npm run prisma:migrate --workspace @tracking/api",
+    "prisma:seed": "npm run prisma:seed --workspace @tracking/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.15"
+    }
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,174 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  super_admin
+}
+
+enum ShipmentStatus {
+  SHIPMENT_CREATED
+  PICKED_UP
+  IN_TRANSIT
+  AT_SORTING_FACILITY
+  ARRIVED_AT_DESTINATION_CITY
+  OUT_FOR_DELIVERY
+  DELIVERED
+  DELAYED
+  ON_HOLD
+  CANCELLED
+}
+
+enum HistoryVisibility {
+  public
+  internal
+}
+
+enum CheckpointStatus {
+  pending
+  reached
+  skipped
+}
+
+model User {
+  id           String            @id @default(cuid())
+  name         String
+  email        String            @unique
+  passwordHash String            @map("password_hash")
+  role         UserRole          @default(admin)
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+  shipments    Shipment[]        @relation("CreatedShipments")
+  history      ShipmentHistory[] @relation("HistoryUpdatedBy")
+
+  @@map("users")
+}
+
+model Shipment {
+  id                    String             @id @default(cuid())
+  trackingId            String             @unique @map("tracking_id")
+  senderName            String             @map("sender_name")
+  senderPhone           String?            @map("sender_phone")
+  senderEmail           String?            @map("sender_email")
+  senderAddress         String?            @map("sender_address")
+  receiverName          String             @map("receiver_name")
+  receiverPhone         String?            @map("receiver_phone")
+  receiverEmail         String?            @map("receiver_email")
+  receiverAddress       String?            @map("receiver_address")
+  origin                String
+  destination           String
+  currentLocation       String?            @map("current_location")
+  currentStatus         ShipmentStatus     @default(SHIPMENT_CREATED) @map("current_status")
+  shipmentType          String?            @map("shipment_type")
+  packageDescription    String?            @map("package_description")
+  carrier               String?
+  shipmentMode          String?            @map("shipment_mode")
+  weight                String?
+  quantity              Int?
+  paymentMode           String?            @map("payment_mode")
+  totalFreight          String?            @map("total_freight")
+  pickupDate            DateTime?          @map("pickup_date")
+  pickupTime            String?            @map("pickup_time")
+  departureDate         DateTime           @map("departure_date")
+  departureTime         String?            @map("departure_time")
+  estimatedDeliveryDate DateTime           @map("estimated_delivery_date")
+  actualDeliveryDate    DateTime?          @map("actual_delivery_date")
+  progressPercentage    Int                @default(0) @map("progress_percentage")
+  publicNote            String?            @map("public_note")
+  comments              String?
+  adminNote             String?            @map("admin_note")
+  originLat             Float?             @map("origin_lat")
+  originLng             Float?             @map("origin_lng")
+  destinationLat        Float?             @map("destination_lat")
+  destinationLng        Float?             @map("destination_lng")
+  currentLocationLat    Float?             @map("current_location_lat")
+  currentLocationLng    Float?             @map("current_location_lng")
+  routeGeometry         Json?              @map("route_geometry")
+  routeDistanceM        Float?             @map("route_distance_m")
+  routeDurationS        Float?             @map("route_duration_s")
+  routeProvider         String?            @map("route_provider")
+  clockOffsetMinutes    Int                @default(0) @map("clock_offset_minutes")
+  autoProgress          Boolean            @default(true) @map("auto_progress")
+  createdById           String?            @map("created_by")
+  createdBy             User?              @relation("CreatedShipments", fields: [createdById], references: [id], onDelete: SetNull)
+  history               ShipmentHistory[]
+  packages              ShipmentPackage[]
+  routeCheckpoints      RouteCheckpoint[]
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+
+  @@index([trackingId])
+  @@index([currentStatus])
+  @@map("shipments")
+}
+
+model ShipmentPackage {
+  id          String   @id @default(cuid())
+  shipmentId  String   @map("shipment_id")
+  shipment    Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  qty         Int?
+  pieces      Int?
+  description String?
+  lengthCm    Float?   @map("length_cm")
+  widthCm     Float?   @map("width_cm")
+  heightCm    Float?   @map("height_cm")
+  weightKg    Float?   @map("weight_kg")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([shipmentId])
+  @@map("shipment_packages")
+}
+
+model ShipmentHistory {
+  id          String            @id @default(cuid())
+  shipmentId  String            @map("shipment_id")
+  shipment    Shipment          @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  status      ShipmentStatus
+  location    String?
+  note        String?
+  visibility  HistoryVisibility @default(public)
+  updatedById String?           @map("updated_by")
+  updatedBy   User?             @relation("HistoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  @@index([shipmentId])
+  @@index([visibility])
+  @@map("shipment_history")
+}
+
+model RouteCheckpoint {
+  id             String           @id @default(cuid())
+  shipmentId     String           @map("shipment_id")
+  shipment       Shipment         @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  checkpointName String           @map("checkpoint_name")
+  location       String
+  expectedTime   DateTime?        @map("expected_time")
+  actualTime     DateTime?        @map("actual_time")
+  status         CheckpointStatus @default(pending)
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  @@index([shipmentId])
+  @@map("route_checkpoints")
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  firstName String   @map("first_name")
+  lastName  String   @map("last_name")
+  email     String
+  phone     String?
+  service   String?
+  message   String
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("contact_messages")
+}
