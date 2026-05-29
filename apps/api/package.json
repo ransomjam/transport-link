@@ -9,6 +9,7 @@
     "start": "node src/server.js",
     "build": "prisma generate",
     "prisma:generate": "prisma generate",
+    "prisma:setup": "prisma generate && prisma migrate deploy && prisma db seed",
     "prisma:migrate": "prisma migrate deploy",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:seed": "prisma db seed",

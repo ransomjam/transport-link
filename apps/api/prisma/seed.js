@@ -8,6 +8,7 @@ const adminEmail = process.env.SEED_ADMIN_EMAIL ?? "admin@goodstracking.local";
 const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "AdminPass123!";
 const isProduction = process.env.NODE_ENV === "production";
 const seedSampleData = process.env.SEED_SAMPLE_DATA === "true" || !isProduction;
+const resetAdminPassword = process.env.SEED_ADMIN_RESET_PASSWORD === "true";
 
 // Resolve endpoints and build the cached road route, mirroring the API so
 // seeded shipments behave exactly like admin-created ones.
@@ -82,8 +83,9 @@ async function main() {
     where: { email: adminEmail }
   });
 
+  const preserveExistingProductionAdmin = existingAdmin && isProduction && !resetAdminPassword;
   const admin =
-    existingAdmin && isProduction
+    preserveExistingProductionAdmin
       ? existingAdmin
       : await prisma.user.upsert({
           where: { email: adminEmail },
@@ -100,8 +102,11 @@ async function main() {
           }
         });
 
-  if (existingAdmin && isProduction) {
+  if (preserveExistingProductionAdmin) {
     console.log(`Admin already exists: ${adminEmail}. Existing production password was not changed.`);
+    console.log("Set SEED_ADMIN_RESET_PASSWORD=true to replace it intentionally.");
+  } else if (existingAdmin && isProduction && resetAdminPassword) {
+    console.log(`Reset seeded production admin password: ${adminEmail}`);
   } else {
     console.log(`Seeded super admin: ${adminEmail}`);
     console.log(`Seeded password: ${adminPassword}`);

@@ -5,6 +5,7 @@ import rateLimit from "express-rate-limit";
 import { env } from "./config/env.js";
 import { healthRouter } from "./routes/health.routes.js";
 import { authRouter } from "./routes/auth.routes.js";
+import { setupRouter } from "./routes/setup.routes.js";
 import { adminRouter } from "./routes/admin.routes.js";
 import { shipmentsRouter } from "./routes/shipments.routes.js";
 import { trackRouter } from "./routes/track.routes.js";
@@ -63,6 +64,7 @@ app.get("/", (_req, res) => {
 app.use("/api", healthRouter);
 app.use("/api", trackRouter);
 app.use("/api", authRouter);
+app.use("/api", setupRouter);
 app.use("/api", adminRouter);
 app.use("/api", shipmentsRouter);
 app.use("/api/messages", messagesRouter);

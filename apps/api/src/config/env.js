@@ -2,6 +2,8 @@ import "dotenv/config";
 import { z } from "zod";
 
 const DEFAULT_JWT_SECRET = "development-only-change-this-secret";
+const optionalFromEnv = (schema) =>
+  z.preprocess((value) => (value === "" ? undefined : value), schema.optional());
 
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -13,7 +15,10 @@ const schema = z.object({
   // Base URL of an OSRM-compatible routing server. Defaults to the public demo
   // server; point this at a self-hosted instance for production.
   OSRM_URL: z.string().url().default("https://router.project-osrm.org"),
-  ROUTE_TIMEOUT_MS: z.coerce.number().int().positive().default(7000)
+  ROUTE_TIMEOUT_MS: z.coerce.number().int().positive().default(7000),
+  SETUP_SECRET: optionalFromEnv(z.string().min(1)),
+  SETUP_ADMIN_EMAIL: optionalFromEnv(z.string().email()),
+  SETUP_ADMIN_PASSWORD: optionalFromEnv(z.string().min(8))
 });
 
 const parsedEnv = schema.parse(process.env);

@@ -157,14 +157,23 @@ Run seed only when you intentionally want to create a starter admin:
 npm run prisma:seed
 ```
 
+To apply production migrations and seed/reset the admin in one Render job,
+use:
+
+```bash
+npm run prisma:setup
+```
+
 For production, the seed script does not overwrite an existing admin password
-and skips sample tracking records unless `SEED_SAMPLE_DATA=true` is set.
+unless `SEED_ADMIN_RESET_PASSWORD=true` is set. It skips sample tracking
+records unless `SEED_SAMPLE_DATA=true` is set.
 
 Optional seed variables:
 
 ```bash
 SEED_ADMIN_EMAIL=admin@example.com
 SEED_ADMIN_PASSWORD=replace-with-a-strong-password
+SEED_ADMIN_RESET_PASSWORD=true
 SEED_SAMPLE_DATA=true
 ```
 

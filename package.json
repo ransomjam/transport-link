@@ -15,6 +15,7 @@
     "start:api": "npm run start --workspace @tracking/api",
     "start:web": "npm run start --workspace @tracking/web",
     "prisma:generate": "npm run prisma:generate --workspace @tracking/api",
+    "prisma:setup": "npm run prisma:setup --workspace @tracking/api",
     "prisma:migrate": "npm run prisma:migrate --workspace @tracking/api",
     "prisma:migrate:dev": "npm run prisma:migrate:dev --workspace @tracking/api",
     "prisma:seed": "npm run prisma:seed --workspace @tracking/api"
