@@ -105,6 +105,13 @@ Push this repository to GitHub so Render can connect to it.
 Create a Supabase project, open the project database connection settings, and
 copy the PostgreSQL connection string. Use it as `DATABASE_URL`.
 
+For Supabase pooled `DATABASE_URL` values with Prisma, add these query
+parameters:
+
+```text
+?pgbouncer=true&connection_limit=1&sslmode=require
+```
+
 ### 3. Deploy Backend on Render
 
 Create a Render **Web Service**.

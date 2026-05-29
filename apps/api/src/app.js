@@ -13,6 +13,8 @@ import messagesRouter from "./routes/messages.routes.js";
 
 export const app = express();
 
+app.set("trust proxy", 1);
+
 const configuredOrigins = [env.FRONTEND_URL, ...env.CORS_ORIGIN.split(",")];
 const allowedOrigins = configuredOrigins
   .map((origin) => origin?.trim())
