@@ -34,10 +34,10 @@ export default function HomePage() {
     <PublicLayout>
       <main>
         <section className="relative overflow-hidden bg-[#0F2742]">
-          {/* Background video to properly cover the area and blend with the dark color */}
-          <div className="absolute inset-0 opacity-40 mix-blend-overlay">
+          {/* Background video to properly cover the area */}
+          <div className="absolute inset-0">
             <video
-              className="h-full w-full object-cover"
+              className="h-full w-full object-cover opacity-60"
               autoPlay
               loop
               muted
@@ -46,8 +46,8 @@ export default function HomePage() {
               <source src="/videos/Intro.mp4" type="video/mp4" />
             </video>
           </div>
-          {/* Smooth gradient to maintain readability while showing the image */}
-          <div className="absolute inset-0 bg-gradient-to-r from-[#0F2742] via-[#0F2742]/90 to-[#0F2742]/10"></div>
+          {/* Smooth gradient to maintain readability while showing the video */}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#0F2742] via-[#0F2742]/70 to-[#0F2742]/10"></div>
 
           <div className="relative mx-auto grid max-w-7xl gap-12 px-5 py-16 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:px-8 lg:py-24">
             <div className="max-w-2xl">
