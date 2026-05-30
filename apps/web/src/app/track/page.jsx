@@ -19,10 +19,10 @@ export default function TrackPage() {
               </div>
             </div>
 
-            <ImagePlaceholder src="/images/air-freight.jpg" label="Estimated route preview" className="min-h-[360px]" tone="light">
+            <ImagePlaceholder src="/images/air-freight.jpg" label="Shipment tracking preview" className="min-h-[360px]" tone="light">
               <div className="flex h-full items-end p-5">
                 <div className="rounded-md bg-white/95 p-4 shadow-sm ring-1 ring-slate-200">
-                  <p className="text-sm font-semibold text-[#0F2742]">Tracking includes current status, Last Updated Location, Estimated Delivery Progress, and Shipment Timeline.</p>
+                  <p className="text-sm font-semibold text-[#0F2742]">Tracking includes current status, current location, delivery progress, and shipment timeline.</p>
                 </div>
               </div>
             </ImagePlaceholder>

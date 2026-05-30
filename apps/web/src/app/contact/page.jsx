@@ -16,9 +16,11 @@ export default function ContactPage() {
                 <a className="font-semibold text-[#0F2742] hover:text-[#049DBF]" href={`tel:${brand.phone}`}>
                   Phone: {brand.displayPhone}
                 </a>
-                <a className="font-semibold text-[#0F2742] hover:text-[#049DBF]" href={`mailto:${brand.email}`}>
-                  Email: {brand.email}
-                </a>
+                {brand.email ? (
+                  <a className="font-semibold text-[#0F2742] hover:text-[#049DBF]" href={`mailto:${brand.email}`}>
+                    Email: {brand.email}
+                  </a>
+                ) : null}
                 <p className="font-semibold text-[#0F2742]">Location: USA</p>
               </div>
             </div>

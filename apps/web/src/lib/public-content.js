@@ -3,7 +3,7 @@ export const brand = {
   shortName: "transport-link",
   phone: "+(918)8498286",
   displayPhone: "+(918) 849-8286",
-  email: "transporthubexpress@gmail.com",
+  email: "",
   location: "USA / United States",
   openingHours: "24H/7",
   logo: "/logo/Logo.png"

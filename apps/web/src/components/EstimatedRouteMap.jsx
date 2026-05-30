@@ -248,7 +248,7 @@ function FallbackRouteCard({ summaries }) {
       <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-normal text-slate-500">
         <span>Shipment Route</span>
         <span aria-hidden="true">&rarr;</span>
-        <span>Last Updated Location</span>
+        <span>Current Location</span>
       </div>
 
       <RouteSummary summaries={summaries} className="mt-4" />
@@ -275,7 +275,7 @@ function RouteSummary({ summaries, className = "" }) {
 function buildSummaries(shipment) {
   return [
     createSummary("origin", "Origin", shipment?.origin),
-    createSummary("current", "Last Updated Location", shipment?.currentLocation),
+    createSummary("current", "Current Location", shipment?.currentLocation),
     createSummary("destination", "Destination", shipment?.destination)
   ];
 }

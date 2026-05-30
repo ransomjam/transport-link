@@ -3,7 +3,7 @@ import PublicLayout from "../../components/PublicLayout";
 const faqs = [
   [
     "How are shipment updates calculated?",
-    "The platform shows estimated route progress and admin-entered shipment updates based on the shipment record."
+    "The platform shows shipment status, current location, and delivery progress based on the shipment record."
   ],
   ["What do I need to track a shipment?", "Use the tracking number provided by the transport-link team."],
   ["Why does my shipment say delayed?", "A delayed status is set when the shipment needs attention or the estimate changes."],

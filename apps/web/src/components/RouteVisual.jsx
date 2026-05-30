@@ -15,8 +15,7 @@ export default function RouteVisual({ shipment }) {
     <section className="overflow-hidden rounded-md bg-white shadow-sm ring-1 ring-slate-200">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
         <div>
-          <h2 className="text-xl font-semibold text-[#0F2742]">Estimated Route</h2>
-          <p className="mt-1 text-sm text-slate-600">Shipment Route with the Last Updated Location when location coordinates are available.</p>
+          <h2 className="text-xl font-semibold text-[#0F2742]">Package Route</h2>
         </div>
       </div>
 
@@ -25,7 +24,7 @@ export default function RouteVisual({ shipment }) {
 
         <div className="mt-5">
           <div className="mb-2 flex items-center justify-between gap-3 text-xs font-semibold uppercase tracking-normal text-slate-500">
-            <span>Estimated Delivery Progress</span>
+            <span>Delivery Progress</span>
             <span className="text-[#0AA66D]">{progress}%</span>
           </div>
           <div className="h-2 rounded-full bg-slate-200">

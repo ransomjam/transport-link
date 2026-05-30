@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import AdminGuard from "../../../../components/AdminGuard";
 import AdminLayout from "../../../../components/AdminLayout";
 import ShipmentForm from "../../../../components/ShipmentForm";
+import RouteVisual from "../../../../components/RouteVisual";
 import { apiRequest, formatDate, shipmentStatuses, statusLabel } from "../../../../lib/api";
 
 export default function ShipmentDetailPage() {
@@ -112,6 +113,14 @@ export default function ShipmentDetailPage() {
               <Metric label="Current location" value={shipment.currentLocation ?? "Not set"} />
               <Metric label="Progress" value={`${shipment.progressPercentage}%`} />
               <Metric label="Estimated delivery" value={formatDate(shipment.estimatedDeliveryDate)} />
+            </section>
+
+            <section>
+              <div className="mb-3">
+                <h2 className="text-lg font-semibold text-ink">Live Position on Map</h2>
+                <p className="text-sm text-slate-600">The marker rides the road route. Use the controls below to advance the timeline and watch it move.</p>
+              </div>
+              <RouteVisual shipment={shipment} />
             </section>
 
             <MovementControl

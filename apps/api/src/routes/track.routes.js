@@ -194,7 +194,7 @@ const PDF_PAGE = {
   bottom: 64
 };
 
-function renderReceiptPdf(shipment, stream) {
+export function renderReceiptPdf(shipment, stream) {
   const doc = new PDFDocument({ bufferPages: true, margin: 42, size: "A4" });
   doc.pipe(stream);
 
@@ -205,25 +205,20 @@ function renderReceiptPdf(shipment, stream) {
     ["Origin", shipment.origin],
     ["Destination", shipment.destination],
     ["Status", shipment.statusLabel],
-    ["Last Updated Location", shipment.currentLocation],
+    ["Current Location", shipment.currentLocation],
     ["Package", shipment.packageDescription],
     ["Carrier", shipment.carrier],
     ["Shipment Mode", shipment.shipmentMode],
     ["Weight", shipment.weight],
-    ["Carrier Reference No.", shipment.trackingId],
     ["Quantity", shipment.quantity],
     ["Payment Mode", shipment.paymentMode],
     ["Total Freight", shipment.totalFreight],
     ["Expected Delivery Date", formatDate(shipment.estimatedDeliveryDate)],
     ["Departure Time", shipment.departureTime],
     ["Pick-up Date", formatDateOnly(shipment.pickupDate)],
-    ["Pick-up Time", shipment.pickupTime],
-    ["Comments", shipment.comments ?? shipment.publicNote]
+    ["Pick-up Time", shipment.pickupTime]
   ]);
   drawPackagesTable(doc, shipment.packages);
-  drawHistoryTable(doc, shipment.history);
-  drawRouteBox(doc, shipment);
-  drawPageFooters(doc);
 
   doc.end();
 }
@@ -271,7 +266,7 @@ function drawReceiptHeader(doc, shipment) {
     .font("Helvetica")
     .fontSize(8)
     .fillColor(PDF_COLORS.muted)
-    .text(`Generated: ${formatDate(new Date())}`, left + width - rightBoxWidth + 12, y + 50, { width: rightBoxWidth - 24, align: "right" });
+    .text("Shipment receipt", left + width - rightBoxWidth + 12, y + 50, { width: rightBoxWidth - 24, align: "right" });
 
   doc.y = y + 96;
   resetCursor(doc);
@@ -308,8 +303,7 @@ function drawPartyCards(doc, shipment) {
       rows: [
         ["Name", shipment.senderName],
         ["Address", shipment.senderAddress],
-        ["Phone", shipment.senderPhone],
-        ["Email", shipment.senderEmail]
+        ["Phone", shipment.senderPhone]
       ]
     },
     {
@@ -317,8 +311,7 @@ function drawPartyCards(doc, shipment) {
       rows: [
         ["Name", shipment.receiverName],
         ["Address", shipment.receiverAddress],
-        ["Phone", shipment.receiverPhone],
-        ["Email", shipment.receiverEmail]
+        ["Phone", shipment.receiverPhone]
       ]
     }
   ];
@@ -386,6 +379,7 @@ function drawFieldGrid(doc, title, rows) {
 }
 
 function drawPackagesTable(doc, packages) {
+  const visiblePackages = packages.slice(0, 6);
   const columns = [
     { label: "Qty", width: 34 },
     { label: "Pieces", width: 44 },
@@ -395,8 +389,8 @@ function drawPackagesTable(doc, packages) {
     { label: "Height", width: 52 },
     { label: "Weight", width: 70 }
   ];
-  const rows = packages.length
-    ? packages.map((item) => [
+  const rows = visiblePackages.length
+    ? visiblePackages.map((item) => [
         item.qty,
         item.pieces,
         item.description,
@@ -408,21 +402,18 @@ function drawPackagesTable(doc, packages) {
     : [["Not set", "", "", "", "", "", ""]];
 
   drawDataTable(doc, "Packages", columns, rows);
-}
 
-function drawHistoryTable(doc, history) {
-  const columns = [
-    { label: "Date", width: 76 },
-    { label: "Time", width: 58 },
-    { label: "Location", width: 128 },
-    { label: "Status", width: 90 },
-    { label: "Note", width: 134 }
-  ];
-  const rows = history.length
-    ? history.map((entry) => [formatDateOnly(entry.createdAt), formatTime(entry.createdAt), entry.location, entry.statusLabel, entry.note])
-    : [["Not set", "", "", "", ""]];
-
-  drawDataTable(doc, "Shipment History", columns, rows);
+  if (packages.length > visiblePackages.length) {
+    doc
+      .font("Helvetica")
+      .fontSize(8)
+      .fillColor(PDF_COLORS.muted)
+      .text(`${packages.length - visiblePackages.length} additional package item(s) are available in the shipment record.`, PDF_PAGE.left, doc.y - 8, {
+        width: pageWidth(doc)
+      });
+    doc.y += 6;
+    resetCursor(doc);
+  }
 }
 
 function drawDataTable(doc, title, columns, rows) {
@@ -485,50 +476,12 @@ function drawTableRow(doc, columns, row, height) {
   resetCursor(doc);
 }
 
-function drawRouteBox(doc, shipment) {
-  drawSectionTitle(doc, "Estimated Route / Map Summary");
-  const route = [shipment.origin, shipment.currentLocation, shipment.destination].filter(Boolean).join(" -> ");
-  const rows = [
-    ["Shipment Route", route],
-    ["Last Updated Location", shipment.currentLocation]
-  ];
-  const height = measureInfoCard(doc, rows, pageWidth(doc));
-  ensureSpace(doc, height + 8);
-  const y = doc.y;
-  drawInfoCard(doc, PDF_PAGE.left, y, pageWidth(doc), height, "Route Summary", rows);
-  doc.y = y + height + 14;
-  resetCursor(doc);
-}
-
 function drawSectionTitle(doc, title) {
   ensureSpace(doc, 32);
   resetCursor(doc);
   doc.font("Helvetica-Bold").fontSize(12).fillColor(PDF_COLORS.ink).text(title, PDF_PAGE.left, doc.y, { width: pageWidth(doc) });
   doc.y += 8;
   resetCursor(doc);
-}
-
-function drawPageFooters(doc) {
-  const range = doc.bufferedPageRange();
-
-  for (let index = 0; index < range.count; index += 1) {
-    doc.switchToPage(index);
-    const y = doc.page.height - 48;
-    doc.moveTo(PDF_PAGE.left, y - 8).lineTo(PDF_PAGE.left + pageWidth(doc), y - 8).stroke(PDF_COLORS.border);
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(8)
-      .fillColor(PDF_COLORS.ink)
-      .text("transport-link Express", PDF_PAGE.left, y, { width: 150 })
-      .font("Helvetica")
-      .fillColor(PDF_COLORS.muted)
-      .text("This receipt is generated from admin-updated shipment tracking records and estimated delivery information.", PDF_PAGE.left + 150, y, {
-        width: pageWidth(doc) - 220
-      })
-      .text(`Page ${index + 1} of ${range.count}`, PDF_PAGE.left + pageWidth(doc) - 58, y, { width: 58, align: "right" });
-  }
-
-  doc.switchToPage(range.count - 1);
 }
 
 function ensureSpace(doc, height) {
@@ -555,7 +508,8 @@ function printValue(value) {
     return "Not set";
   }
 
-  return String(value);
+  const text = String(value).replace(/\s+/g, " ").trim();
+  return text.length > 140 ? `${text.slice(0, 137)}...` : text;
 }
 
 function formatDate(value) {
@@ -576,16 +530,6 @@ function formatDateOnly(value) {
 
   return new Intl.DateTimeFormat("en", {
     dateStyle: "medium"
-  }).format(new Date(value));
-}
-
-function formatTime(value) {
-  if (!value) {
-    return "Not set";
-  }
-
-  return new Intl.DateTimeFormat("en", {
-    timeStyle: "short"
   }).format(new Date(value));
 }
 

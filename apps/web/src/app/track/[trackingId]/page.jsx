@@ -30,6 +30,22 @@ export default function TrackingResultPage() {
       .finally(() => setLoading(false));
   }, [trackingId]);
 
+  // Silently refresh so the map position stays current as the package advances
+  // along its route (and reflects admin timeline changes) without a reload.
+  useEffect(() => {
+    if (!trackingId) {
+      return undefined;
+    }
+
+    const timer = setInterval(() => {
+      apiRequest(`/track/${trackingId}`, { auth: false })
+        .then((data) => setShipment(data.shipment))
+        .catch(() => {});
+    }, 20000);
+
+    return () => clearInterval(timer);
+  }, [trackingId]);
+
   return (
     <PublicLayout>
       <main className="bg-[#F5F8FA] print:bg-white">
@@ -108,7 +124,7 @@ function TrackingSummary({ shipment }) {
         <Info label="Current Status" value={statusLabel(shipment.currentStatus)} />
         <Info label="Origin" value={shipment.origin} />
         <Info label="Destination" value={shipment.destination} />
-        <Info label="Last Updated Location" value={shipment.currentLocation ?? "Not set"} />
+        <Info label="Current Location" value={shipment.currentLocation ?? "Not set"} />
         <Info label="Estimated Delivery Date" value={formatDate(shipment.estimatedDeliveryDate)} />
         <Info label="Shipment Type" value={shipment.shipmentType ?? "Not set"} />
       </div>
@@ -116,7 +132,6 @@ function TrackingSummary({ shipment }) {
       <div className="mt-6">
         <ProgressBar value={shipment.progressPercentage} />
       </div>
-      <p className="mt-3 text-sm text-slate-500">Route and progress are estimated from scheduled dates, public shipment history, and admin updates.</p>
     </section>
   );
 }
