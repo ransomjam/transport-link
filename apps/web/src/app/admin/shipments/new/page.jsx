@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import AdminGuard from "../../../../components/AdminGuard";
 import AdminLayout from "../../../../components/AdminLayout";
+import ShipmentCsvImport from "../../../../components/ShipmentCsvImport";
 import ShipmentForm from "../../../../components/ShipmentForm";
 import { apiRequest } from "../../../../lib/api";
 
@@ -33,6 +34,9 @@ export default function NewShipmentPage() {
     <AdminGuard>
       <AdminLayout title="Add Shipment">
         {error ? <p className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+        <div className="mb-5">
+          <ShipmentCsvImport />
+        </div>
         <ShipmentForm onSubmit={submit} loading={loading} submitLabel="Create shipment" />
       </AdminLayout>
     </AdminGuard>
