@@ -34,11 +34,18 @@ export default function HomePage() {
     <PublicLayout>
       <main>
         <section className="relative overflow-hidden bg-[#0F2742]">
-          {/* Fix the background image to properly cover the area and blend with the dark color */}
-          <div 
-            className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-40 mix-blend-overlay"
-            style={{ backgroundImage: `url(${homepageImages.introBg.src})` }}
-          />
+          {/* Background video to properly cover the area and blend with the dark color */}
+          <div className="absolute inset-0 opacity-40 mix-blend-overlay">
+            <video
+              className="h-full w-full object-cover"
+              autoPlay
+              loop
+              muted
+              playsInline
+            >
+              <source src="/videos/Intro.mp4" type="video/mp4" />
+            </video>
+          </div>
           {/* Smooth gradient to maintain readability while showing the image */}
           <div className="absolute inset-0 bg-gradient-to-r from-[#0F2742] via-[#0F2742]/90 to-[#0F2742]/10"></div>
 
