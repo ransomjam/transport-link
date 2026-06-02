@@ -3,37 +3,15 @@
 import { useState } from "react";
 import { carrierOptions, paymentModes, shipmentModes, shipmentStatuses, shipmentTypes, toDateInput, toDateTimeInput } from "../lib/api";
 
-const emptyPackage = {
-  qty: "",
-  pieces: "",
-  description: "",
-  lengthCm: "",
-  widthCm: "",
-  heightCm: "",
-  weightKg: ""
-};
 
 export default function ShipmentForm({ shipment, loading = false, onSubmit, submitLabel = "Save shipment" }) {
-  const [packages, setPackages] = useState(() => initialPackages(shipment));
 
   function submit(event) {
     event.preventDefault();
     const body = Object.fromEntries(new FormData(event.currentTarget).entries());
-    body.packages = packages.map((item) => ({ ...item }));
     onSubmit(body);
   }
 
-  function updatePackage(index, field, value) {
-    setPackages((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)));
-  }
-
-  function addPackage() {
-    setPackages((current) => [...current, { ...emptyPackage }]);
-  }
-
-  function removePackage(index) {
-    setPackages((current) => (current.length === 1 ? [{ ...emptyPackage }] : current.filter((_, itemIndex) => itemIndex !== index)));
-  }
 
   return (
     <form onSubmit={submit} className="grid gap-5">
@@ -73,7 +51,6 @@ export default function ShipmentForm({ shipment, loading = false, onSubmit, subm
           <Select name="carrier" label="Carrier" defaultValue={shipment?.carrier ?? ""} options={toOptions(carrierOptions)} />
           <Select name="shipmentMode" label="Shipment Mode" defaultValue={shipment?.shipmentMode ?? ""} options={toOptions(shipmentModes)} />
           <Field name="weight" label="Weight" defaultValue={shipment?.weight ?? ""} placeholder="65kg" />
-          <Field name="quantity" label="Quantity" type="number" min="0" defaultValue={shipment?.quantity ?? ""} />
           <Select name="paymentMode" label="Payment Mode" defaultValue={shipment?.paymentMode ?? ""} options={toOptions(paymentModes)} />
           <Field name="totalFreight" label="Total Freight" defaultValue={shipment?.totalFreight ?? ""} />
           <Field name="pickupDate" label="Pick-up Date" type="date" defaultValue={toDateInput(shipment?.pickupDate)} />
@@ -86,52 +63,7 @@ export default function ShipmentForm({ shipment, loading = false, onSubmit, subm
         <TextArea name="comments" label="Comments" defaultValue={shipment?.comments ?? ""} />
       </FormSection>
 
-      <FormSection
-        title="Package Details"
-        action={
-          <button type="button" onClick={addPackage} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-signal hover:text-signal">
-            Add package row
-          </button>
-        }
-      >
-        <div className="grid gap-3">
-          {packages.map((item, index) => (
-            <div key={index} className="grid gap-3 rounded-md bg-slate-50 p-3 ring-1 ring-slate-200 md:grid-cols-2 lg:grid-cols-8">
-              <PackageField label="Qty" value={item.qty} onChange={(value) => updatePackage(index, "qty", value)} />
-              <PackageField label="Pieces" value={item.pieces} onChange={(value) => updatePackage(index, "pieces", value)} />
-              <PackageField label="Description" value={item.description} onChange={(value) => updatePackage(index, "description", value)} className="lg:col-span-2" />
-              <PackageField label="Length (cm)" value={item.lengthCm} onChange={(value) => updatePackage(index, "lengthCm", value)} step="0.01" />
-              <PackageField label="Width (cm)" value={item.widthCm} onChange={(value) => updatePackage(index, "widthCm", value)} step="0.01" />
-              <PackageField label="Height (cm)" value={item.heightCm} onChange={(value) => updatePackage(index, "heightCm", value)} step="0.01" />
-              <PackageField label="Weight (kg)" value={item.weightKg} onChange={(value) => updatePackage(index, "weightKg", value)} step="0.01" />
-              <button type="button" onClick={() => removePackage(index)} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-600 hover:border-red-300 hover:text-red-700 md:col-span-2 lg:col-span-8">
-                Remove row
-              </button>
-            </div>
-          ))}
-        </div>
-      </FormSection>
 
-      <FormSection title="Map Coordinates & Movement, Optional">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <Field name="originLat" label="Origin Latitude" type="number" step="any" defaultValue={shipment?.originLat ?? ""} />
-          <Field name="originLng" label="Origin Longitude" type="number" step="any" defaultValue={shipment?.originLng ?? ""} />
-          <Field name="destinationLat" label="Destination Latitude" type="number" step="any" defaultValue={shipment?.destinationLat ?? ""} />
-          <Field name="destinationLng" label="Destination Longitude" type="number" step="any" defaultValue={shipment?.destinationLng ?? ""} />
-          <Field name="currentLocationLat" label="Current Location Latitude" type="number" step="any" defaultValue={shipment?.currentLocationLat ?? ""} />
-          <Field name="currentLocationLng" label="Current Location Longitude" type="number" step="any" defaultValue={shipment?.currentLocationLng ?? ""} />
-          <Select
-            name="autoProgress"
-            label="Auto-Advance Position"
-            defaultValue={String(shipment?.autoProgress ?? true)}
-            options={[
-              ["true", "On — moves along route over time"],
-              ["false", "Off — pin to current coordinates"]
-            ]}
-          />
-        </div>
-        <ReadOnlyHint text="Leave coordinates blank to resolve them from the origin/destination names. When Auto-Advance is On, the package position is calculated along the road route from the departure to the expected delivery time; the Current Location coordinates are only used when it is Off." />
-      </FormSection>
 
       <FormSection title="Notes">
         <div className="grid gap-4 md:grid-cols-2">
@@ -145,22 +77,6 @@ export default function ShipmentForm({ shipment, loading = false, onSubmit, subm
       </button>
     </form>
   );
-}
-
-function initialPackages(shipment) {
-  if (!shipment?.packages?.length) {
-    return [{ ...emptyPackage }];
-  }
-
-  return shipment.packages.map((item) => ({
-    qty: item.qty ?? "",
-    pieces: item.pieces ?? "",
-    description: item.description ?? "",
-    lengthCm: item.lengthCm ?? "",
-    widthCm: item.widthCm ?? "",
-    heightCm: item.heightCm ?? "",
-    weightKg: item.weightKg ?? ""
-  }));
 }
 
 function toOptions(values) {
@@ -184,24 +100,6 @@ function Field({ label, ...props }) {
     <label className="grid gap-2 text-sm font-medium text-slate-700">
       {label}
       <input className="min-h-11 rounded-md border border-slate-300 px-3 py-2 text-base outline-none focus:border-signal" {...props} />
-    </label>
-  );
-}
-
-function PackageField({ label, value, onChange, className = "", step }) {
-  const isDescription = label === "Description";
-
-  return (
-    <label className={`grid gap-2 text-sm font-medium text-slate-700 ${className}`}>
-      {label}
-      <input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        type={isDescription ? "text" : "number"}
-        step={step ?? "1"}
-        min={isDescription ? undefined : "0"}
-        className="min-h-10 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-signal"
-      />
     </label>
   );
 }

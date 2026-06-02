@@ -210,7 +210,6 @@ export function renderReceiptPdf(shipment, stream) {
     ["Carrier", shipment.carrier],
     ["Shipment Mode", shipment.shipmentMode],
     ["Weight", shipment.weight],
-    ["Quantity", shipment.quantity],
     ["Payment Mode", shipment.paymentMode],
     ["Total Freight", shipment.totalFreight],
     ["Expected Delivery Date", formatDate(shipment.estimatedDeliveryDate)],
@@ -218,7 +217,6 @@ export function renderReceiptPdf(shipment, stream) {
     ["Pick-up Date", formatDateOnly(shipment.pickupDate)],
     ["Pick-up Time", shipment.pickupTime]
   ]);
-  drawPackagesTable(doc, shipment.packages);
 
   doc.end();
 }
@@ -376,104 +374,6 @@ function drawFieldGrid(doc, title, rows) {
   }
 
   doc.y += 6;
-}
-
-function drawPackagesTable(doc, packages) {
-  const visiblePackages = packages.slice(0, 6);
-  const columns = [
-    { label: "Qty", width: 34 },
-    { label: "Pieces", width: 44 },
-    { label: "Description", width: 176 },
-    { label: "Length", width: 58 },
-    { label: "Width", width: 52 },
-    { label: "Height", width: 52 },
-    { label: "Weight", width: 70 }
-  ];
-  const rows = visiblePackages.length
-    ? visiblePackages.map((item) => [
-        item.qty,
-        item.pieces,
-        item.description,
-        formatMeasurement(item.lengthCm, "cm"),
-        formatMeasurement(item.widthCm, "cm"),
-        formatMeasurement(item.heightCm, "cm"),
-        formatMeasurement(item.weightKg, "kg")
-      ])
-    : [["Not set", "", "", "", "", "", ""]];
-
-  drawDataTable(doc, "Packages", columns, rows);
-
-  if (packages.length > visiblePackages.length) {
-    doc
-      .font("Helvetica")
-      .fontSize(8)
-      .fillColor(PDF_COLORS.muted)
-      .text(`${packages.length - visiblePackages.length} additional package item(s) are available in the shipment record.`, PDF_PAGE.left, doc.y - 8, {
-        width: pageWidth(doc)
-      });
-    doc.y += 6;
-    resetCursor(doc);
-  }
-}
-
-function drawDataTable(doc, title, columns, rows) {
-  drawSectionTitle(doc, title);
-  drawTableHeader(doc, columns);
-
-  rows.forEach((row) => {
-    const rowHeight = measureTableRow(doc, columns, row);
-
-    if (doc.y + rowHeight > pageBottom(doc)) {
-      doc.addPage();
-      resetCursor(doc);
-      drawSectionTitle(doc, title);
-      drawTableHeader(doc, columns);
-    }
-
-    drawTableRow(doc, columns, row, rowHeight);
-  });
-
-  doc.y += 14;
-  resetCursor(doc);
-}
-
-function drawTableHeader(doc, columns) {
-  ensureSpace(doc, 28);
-  const y = doc.y;
-  let x = PDF_PAGE.left;
-
-  columns.forEach((column) => {
-    doc.rect(x, y, column.width, 24).fillAndStroke(PDF_COLORS.table, PDF_COLORS.border);
-    doc.font("Helvetica-Bold").fontSize(8).fillColor(PDF_COLORS.ink).text(column.label, x + 5, y + 8, { width: column.width - 10, height: 12 });
-    x += column.width;
-  });
-
-  doc.y = y + 24;
-  resetCursor(doc);
-}
-
-function measureTableRow(doc, columns, row) {
-  doc.font("Helvetica").fontSize(8);
-  const heights = row.map((value, index) => doc.heightOfString(printValue(value), { width: columns[index].width - 10 }) + 12);
-  return Math.max(26, ...heights);
-}
-
-function drawTableRow(doc, columns, row, height) {
-  const y = doc.y;
-  let x = PDF_PAGE.left;
-
-  row.forEach((value, index) => {
-    const width = columns[index].width;
-    doc.rect(x, y, width, height).stroke(PDF_COLORS.border);
-    doc.font("Helvetica").fontSize(8).fillColor(PDF_COLORS.text).text(printValue(value), x + 5, y + 7, {
-      width: width - 10,
-      height: height - 10
-    });
-    x += width;
-  });
-
-  doc.y = y + height;
-  resetCursor(doc);
 }
 
 function drawSectionTitle(doc, title) {

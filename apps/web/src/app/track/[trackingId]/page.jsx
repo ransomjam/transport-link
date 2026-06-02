@@ -91,8 +91,6 @@ export default function TrackingResultPage() {
               </div>
 
               <DetailsCard shipment={shipment} />
-              <PackagesTable packages={shipment.packages ?? []} />
-
               <ShipmentHistoryTable history={shipment.history ?? []} />
             </div>
           )}
@@ -159,7 +157,6 @@ function DetailsCard({ shipment }) {
     ["Shipment Mode", shipment.shipmentMode],
     ["Weight", shipment.weight],
     ["Carrier Reference No. / Tracking ID", shipment.trackingId],
-    ["Quantity", shipment.quantity],
     ["Payment Mode", shipment.paymentMode],
     ["Total Freight", shipment.totalFreight],
     ["Expected Delivery Date", formatDate(shipment.estimatedDeliveryDate)],
@@ -176,46 +173,6 @@ function DetailsCard({ shipment }) {
         {rows.map(([label, value]) => (
           <Info key={label} label={label} value={value ?? "Not set"} />
         ))}
-      </div>
-    </section>
-  );
-}
-
-function PackagesTable({ packages }) {
-  return (
-    <section className="overflow-hidden rounded-md bg-white shadow-sm ring-1 ring-slate-200">
-      <div className="border-b border-slate-200 px-5 py-4">
-        <h2 className="text-xl font-semibold text-[#0F2742]">Packages</h2>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-            <tr>
-              {["Qty", "Pieces", "Description", "Length (cm)", "Width (cm)", "Height (cm)", "Weight (kg)"].map((heading) => (
-                <th key={heading} className="px-4 py-3 font-semibold">{heading}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {packages.length ? (
-              packages.map((item, index) => (
-                <tr key={index}>
-                  <td className="px-4 py-3">{item.qty ?? "Not set"}</td>
-                  <td className="px-4 py-3">{item.pieces ?? "Not set"}</td>
-                  <td className="px-4 py-3">{item.description ?? "Not set"}</td>
-                  <td className="px-4 py-3">{item.lengthCm ?? "Not set"}</td>
-                  <td className="px-4 py-3">{item.widthCm ?? "Not set"}</td>
-                  <td className="px-4 py-3">{item.heightCm ?? "Not set"}</td>
-                  <td className="px-4 py-3">{item.weightKg ?? "Not set"}</td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td className="px-4 py-5 text-slate-500" colSpan={7}>No package rows available.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
       </div>
     </section>
   );
