@@ -179,13 +179,13 @@ function toPublicShipment(shipment) {
 }
 
 const PDF_COLORS = {
-  ink: "#0F2742",
-  signal: "#049DBF",
-  muted: "#64748B",
+  ink: "#000000",
+  signal: "#000000",
+  muted: "#4B5563",
   text: "#111827",
-  border: "#CBD5E1",
-  soft: "#F5F8FA",
-  table: "#F1F5F9"
+  border: "#000000",
+  soft: "#FFFFFF",
+  table: "#F3F4F6"
 };
 
 const PDF_PAGE = {
@@ -201,12 +201,12 @@ export function renderReceiptPdf(shipment, stream) {
   drawReceiptHeader(doc, shipment);
   drawSummaryStrip(doc, shipment);
   drawPartyCards(doc, shipment);
-  drawFieldGrid(doc, "Shipment Information", [
+  drawFieldGrid(doc, "Shipment Details", [
     ["Origin", shipment.origin],
     ["Destination", shipment.destination],
     ["Status", shipment.statusLabel],
     ["Current Location", shipment.currentLocation],
-    ["Package", shipment.packageDescription],
+    ["Package Description", shipment.packageDescription],
     ["Carrier", shipment.carrier],
     ["Shipment Mode", shipment.shipmentMode],
     ["Weight", shipment.weight],
@@ -217,6 +217,8 @@ export function renderReceiptPdf(shipment, stream) {
     ["Pick-up Date", formatDateOnly(shipment.pickupDate)],
     ["Pick-up Time", shipment.pickupTime]
   ]);
+  
+  drawFooter(doc);
 
   doc.end();
 }
@@ -224,80 +226,72 @@ export function renderReceiptPdf(shipment, stream) {
 function drawReceiptHeader(doc, shipment) {
   const left = PDF_PAGE.left;
   const width = pageWidth(doc);
-  const rightBoxWidth = 170;
+  const rightBoxWidth = 200;
   const y = 42;
 
   let logoDrawn = false;
   try {
     const logoPath = path.resolve(process.cwd(), "../web/public/logo/Logo.png");
     if (fs.existsSync(logoPath)) {
-      doc.image(logoPath, left, y + 8, { width: 72 });
+      doc.image(logoPath, left, y, { height: 40 });
       logoDrawn = true;
     }
   } catch (e) {}
 
   if (!logoDrawn) {
-    doc.roundedRect(left, y, 72, 52, 6).fillAndStroke(PDF_COLORS.soft, PDF_COLORS.border);
-    doc.font("Helvetica-Bold").fontSize(14).fillColor(PDF_COLORS.ink).text("THX", left, y + 18, { width: 72, align: "center" });
+    doc.font("Helvetica-Bold").fontSize(24).fillColor(PDF_COLORS.ink).text("TRANSPORT-LINK", left, y);
   }
 
-  doc
-    .font("Helvetica-Bold")
-    .fontSize(21)
-    .fillColor(PDF_COLORS.ink)
-    .text("transport-link Express", left + 90, y + 4, { width: width - rightBoxWidth - 106 })
-    .font("Helvetica")
-    .fontSize(10)
-    .fillColor(PDF_COLORS.muted)
-    .text("Shipment Tracking Receipt", left + 90, y + 32, { width: width - rightBoxWidth - 106 });
+  doc.font("Helvetica").fontSize(8).fillColor(PDF_COLORS.muted)
+     .text("123 Logistics Avenue, Global Hub\nsupport@transport-link.com\n+1 (800) 555-0199", left, y + (logoDrawn ? 45 : 30));
 
   doc
-    .roundedRect(left + width - rightBoxWidth, y, rightBoxWidth, 72, 6)
-    .fillAndStroke("#FFFFFF", PDF_COLORS.border)
     .font("Helvetica-Bold")
-    .fontSize(9)
-    .fillColor(PDF_COLORS.muted)
-    .text("Consignment No.", left + width - rightBoxWidth + 12, y + 12, { width: rightBoxWidth - 24, align: "right" })
-    .fontSize(14)
+    .fontSize(18)
     .fillColor(PDF_COLORS.ink)
-    .text(shipment.trackingId, left + width - rightBoxWidth + 12, y + 27, { width: rightBoxWidth - 24, align: "right" })
-    .font("Helvetica")
+    .text("WAYBILL / CONSIGNMENT", left + width - rightBoxWidth, y, { width: rightBoxWidth, align: "right" });
+
+  doc
+    .rect(left + width - rightBoxWidth, y + 25, rightBoxWidth, 45)
+    .stroke(PDF_COLORS.border)
+    .font("Helvetica-Bold")
     .fontSize(8)
     .fillColor(PDF_COLORS.muted)
-    .text("Shipment receipt", left + width - rightBoxWidth + 12, y + 50, { width: rightBoxWidth - 24, align: "right" });
+    .text("TRACKING NO.", left + width - rightBoxWidth + 8, y + 33, { width: rightBoxWidth - 16, align: "left" })
+    .fontSize(16)
+    .fillColor(PDF_COLORS.ink)
+    .text(shipment.trackingId, left + width - rightBoxWidth + 8, y + 48, { width: rightBoxWidth - 16, align: "right" });
 
-  doc.y = y + 96;
+  doc.y = y + 90;
   resetCursor(doc);
 }
 
 function drawSummaryStrip(doc, shipment) {
   const items = [
-    ["Status", shipment.statusLabel],
-    ["Origin", shipment.origin],
-    ["Destination", shipment.destination],
-    ["Expected Delivery", formatDateOnly(shipment.estimatedDeliveryDate)]
+    ["STATUS", shipment.statusLabel],
+    ["ORIGIN", shipment.origin],
+    ["DESTINATION", shipment.destination],
+    ["EXPECTED DELIVERY", formatDateOnly(shipment.estimatedDeliveryDate)]
   ];
-  const gap = 8;
-  const cellWidth = (pageWidth(doc) - gap * (items.length - 1)) / items.length;
+  const cellWidth = pageWidth(doc) / items.length;
   const y = doc.y;
 
   items.forEach(([label, value], index) => {
-    const x = PDF_PAGE.left + index * (cellWidth + gap);
-    doc.roundedRect(x, y, cellWidth, 52, 5).fillAndStroke(PDF_COLORS.soft, PDF_COLORS.border);
-    doc.font("Helvetica-Bold").fontSize(7.5).fillColor(PDF_COLORS.muted).text(label, x + 8, y + 9, { width: cellWidth - 16 });
-    doc.font("Helvetica-Bold").fontSize(9.5).fillColor(PDF_COLORS.ink).text(printValue(value), x + 8, y + 24, { width: cellWidth - 16, height: 20 });
+    const x = PDF_PAGE.left + index * cellWidth;
+    doc.rect(x, y, cellWidth, 40).fillAndStroke(PDF_COLORS.soft, PDF_COLORS.border);
+    doc.font("Helvetica-Bold").fontSize(7).fillColor(PDF_COLORS.muted).text(label, x + 6, y + 6, { width: cellWidth - 12 });
+    doc.font("Helvetica-Bold").fontSize(9).fillColor(PDF_COLORS.ink).text(printValue(value), x + 6, y + 18, { width: cellWidth - 12, height: 20 });
   });
 
-  doc.y = y + 70;
+  doc.y = y + 40;
   resetCursor(doc);
 }
 
 function drawPartyCards(doc, shipment) {
-  const gap = 12;
-  const cardWidth = (pageWidth(doc) - gap) / 2;
+  const cardWidth = pageWidth(doc) / 2;
   const cards = [
     {
-      title: "Shipper Information",
+      title: "SHIPPER DETAILS",
       rows: [
         ["Name", shipment.senderName],
         ["Address", shipment.senderAddress],
@@ -305,7 +299,7 @@ function drawPartyCards(doc, shipment) {
       ]
     },
     {
-      title: "Receiver Information",
+      title: "RECEIVER DETAILS",
       rows: [
         ["Name", shipment.receiverName],
         ["Address", shipment.receiverAddress],
@@ -316,72 +310,92 @@ function drawPartyCards(doc, shipment) {
   const heights = cards.map((card) => measureInfoCard(doc, card.rows, cardWidth));
   const height = Math.max(...heights);
 
-  ensureSpace(doc, height + 14);
+  ensureSpace(doc, height);
   const y = doc.y;
 
   cards.forEach((card, index) => {
-    drawInfoCard(doc, PDF_PAGE.left + index * (cardWidth + gap), y, cardWidth, height, card.title, card.rows);
+    drawInfoCard(doc, PDF_PAGE.left + index * cardWidth, y, cardWidth, height, card.title, card.rows);
   });
 
-  doc.y = y + height + 18;
+  doc.y = y + height;
   resetCursor(doc);
 }
 
 function measureInfoCard(doc, rows, width) {
-  const valueWidth = width - 94;
-  doc.font("Helvetica").fontSize(8.5);
-  const rowsHeight = rows.reduce((sum, [, value]) => sum + Math.max(15, doc.heightOfString(printValue(value), { width: valueWidth }) + 3), 0);
-  return Math.max(112, 38 + rowsHeight + 12);
+  const valueWidth = width - 80;
+  doc.font("Helvetica").fontSize(8);
+  const rowsHeight = rows.reduce((sum, [, value]) => sum + Math.max(12, doc.heightOfString(printValue(value), { width: valueWidth }) + 2), 0);
+  return Math.max(90, 30 + rowsHeight + 10);
 }
 
 function drawInfoCard(doc, x, y, width, height, title, rows) {
-  doc.roundedRect(x, y, width, height, 6).fillAndStroke("#FFFFFF", PDF_COLORS.border);
-  doc.font("Helvetica-Bold").fontSize(11).fillColor(PDF_COLORS.ink).text(title, x + 12, y + 12, { width: width - 24 });
+  doc.rect(x, y, width, height).fillAndStroke(PDF_COLORS.soft, PDF_COLORS.border);
+  doc.rect(x, y, width, 20).fillAndStroke(PDF_COLORS.table, PDF_COLORS.border);
+  doc.font("Helvetica-Bold").fontSize(9).fillColor(PDF_COLORS.ink).text(title, x + 6, y + 6, { width: width - 12 });
 
-  let rowY = y + 36;
+  let rowY = y + 26;
   rows.forEach(([label, value]) => {
-    doc.font("Helvetica-Bold").fontSize(8).fillColor(PDF_COLORS.muted).text(label, x + 12, rowY, { width: 58 });
-    doc.font("Helvetica").fontSize(8.5).fillColor(PDF_COLORS.text).text(printValue(value), x + 76, rowY, { width: width - 88 });
-    rowY += Math.max(15, doc.heightOfString(printValue(value), { width: width - 88 }) + 3);
+    doc.font("Helvetica-Bold").fontSize(8).fillColor(PDF_COLORS.muted).text(label, x + 6, rowY, { width: 50 });
+    doc.font("Helvetica").fontSize(8).fillColor(PDF_COLORS.text).text(printValue(value), x + 60, rowY, { width: width - 70 });
+    rowY += Math.max(12, doc.heightOfString(printValue(value), { width: width - 70 }) + 2);
   });
 }
 
 function drawFieldGrid(doc, title, rows) {
   drawSectionTitle(doc, title);
-  const columns = 3;
-  const gap = 8;
-  const cellWidth = (pageWidth(doc) - gap * (columns - 1)) / columns;
+  const columns = 2;
+  const cellWidth = pageWidth(doc) / columns;
 
   for (let index = 0; index < rows.length; index += columns) {
     const group = rows.slice(index, index + columns);
     const cellHeights = group.map(([, value]) => {
-      doc.font("Helvetica-Bold").fontSize(8.5);
-      return Math.max(48, 26 + doc.heightOfString(printValue(value), { width: cellWidth - 16 }));
+      doc.font("Helvetica-Bold").fontSize(8);
+      return Math.max(30, 18 + doc.heightOfString(printValue(value), { width: cellWidth - 12 }));
     });
     const rowHeight = Math.max(...cellHeights);
-    ensureSpace(doc, rowHeight + 8);
+    ensureSpace(doc, rowHeight);
     const y = doc.y;
 
     group.forEach(([label, value], columnIndex) => {
-      const x = PDF_PAGE.left + columnIndex * (cellWidth + gap);
-      doc.roundedRect(x, y, cellWidth, rowHeight, 5).fillAndStroke("#FFFFFF", PDF_COLORS.border);
-      doc.font("Helvetica-Bold").fontSize(7.5).fillColor(PDF_COLORS.muted).text(label, x + 8, y + 8, { width: cellWidth - 16 });
-      doc.font("Helvetica-Bold").fontSize(8.7).fillColor(PDF_COLORS.ink).text(printValue(value), x + 8, y + 23, { width: cellWidth - 16 });
+      const x = PDF_PAGE.left + columnIndex * cellWidth;
+      doc.rect(x, y, cellWidth, rowHeight).fillAndStroke(PDF_COLORS.soft, PDF_COLORS.border);
+      doc.font("Helvetica-Bold").fontSize(7).fillColor(PDF_COLORS.muted).text(label.toUpperCase(), x + 6, y + 4, { width: cellWidth - 12 });
+      doc.font("Helvetica-Bold").fontSize(9).fillColor(PDF_COLORS.ink).text(printValue(value), x + 6, y + 14, { width: cellWidth - 12 });
     });
 
-    doc.y = y + rowHeight + 8;
+    doc.y = y + rowHeight;
     resetCursor(doc);
   }
-
-  doc.y += 6;
 }
 
 function drawSectionTitle(doc, title) {
-  ensureSpace(doc, 32);
+  ensureSpace(doc, 26);
+  doc.y += 10;
   resetCursor(doc);
-  doc.font("Helvetica-Bold").fontSize(12).fillColor(PDF_COLORS.ink).text(title, PDF_PAGE.left, doc.y, { width: pageWidth(doc) });
-  doc.y += 8;
+  doc.rect(PDF_PAGE.left, doc.y, pageWidth(doc), 16).fillAndStroke(PDF_COLORS.ink, PDF_COLORS.border);
+  doc.font("Helvetica-Bold").fontSize(9).fillColor(PDF_COLORS.soft).text(title.toUpperCase(), PDF_PAGE.left + 6, doc.y + 4, { width: pageWidth(doc) - 12 });
+  doc.y += 16;
   resetCursor(doc);
+}
+
+function drawFooter(doc) {
+  ensureSpace(doc, 120);
+  doc.y += 30;
+  const y = doc.y;
+  
+  doc.font("Helvetica-Bold").fontSize(10).fillColor(PDF_COLORS.ink).text("AUTHORIZATION & SIGNATURE", PDF_PAGE.left, y);
+  
+  doc.font("Helvetica").fontSize(8).fillColor(PDF_COLORS.text)
+    .text("I hereby confirm that the details provided above are accurate and the shipment complies with all applicable regulations. This waybill serves as a binding agreement for carriage under the standard terms and conditions of Transport-Link.", PDF_PAGE.left, y + 16, { width: pageWidth(doc) });
+    
+  doc.rect(PDF_PAGE.left, y + 60, 200, 1).stroke(PDF_COLORS.border);
+  doc.font("Helvetica-Bold").fontSize(8).fillColor(PDF_COLORS.muted).text("AUTHORIZED SIGNATURE", PDF_PAGE.left, y + 65);
+  
+  doc.rect(PDF_PAGE.left + 250, y + 60, 150, 1).stroke(PDF_COLORS.border);
+  doc.font("Helvetica-Bold").fontSize(8).fillColor(PDF_COLORS.muted).text("DATE", PDF_PAGE.left + 250, y + 65);
+  
+  const generatedText = `Generated on ${new Date().toUTCString()}`;
+  doc.font("Helvetica").fontSize(7).fillColor(PDF_COLORS.muted).text(generatedText, PDF_PAGE.left, pageBottom(doc) + 10, { width: pageWidth(doc), align: "center" });
 }
 
 function ensureSpace(doc, height) {
