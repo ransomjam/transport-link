@@ -250,6 +250,20 @@ function formatShipment(shipment) {
   };
 }
 
+// True when two coordinate values represent the same point (treating
+// null/undefined/empty as equal).
+function sameCoordinate(a, b) {
+  const aEmpty = a === null || a === undefined || a === "";
+  const bEmpty = b === null || b === undefined || b === "";
+  if (aEmpty && bEmpty) {
+    return true;
+  }
+  if (aEmpty || bEmpty) {
+    return false;
+  }
+  return Number(a) === Number(b);
+}
+
 function compactData(input, omit = []) {
   const skipped = new Set(omit);
 
@@ -451,8 +465,30 @@ shipmentsRouter.put("/shipments/:id", requireAdmin, auditEvent("shipment.update"
     const locationChanged = data.currentLocation !== undefined && data.currentLocation !== existing.currentLocation;
     const packages = input.packages === undefined ? undefined : normalizePackages(input.packages);
 
-    // Recompute the cached road route when an endpoint moved (or it is missing).
-    const routeFields = routeNeedsRebuild(existing, nextShipment) ? await computeRouteFields(nextShipment) : null;
+    // When the admin changes an origin/destination NAME but the coordinates are
+    // still the old (stale) values, drop those coordinates so the route is
+    // re-geocoded from the new name. Explicitly edited coordinates are kept.
+    const routeInput = { ...nextShipment };
+    if (
+      nextShipment.origin !== existing.origin &&
+      sameCoordinate(nextShipment.originLat, existing.originLat) &&
+      sameCoordinate(nextShipment.originLng, existing.originLng)
+    ) {
+      routeInput.originLat = null;
+      routeInput.originLng = null;
+    }
+    if (
+      nextShipment.destination !== existing.destination &&
+      sameCoordinate(nextShipment.destinationLat, existing.destinationLat) &&
+      sameCoordinate(nextShipment.destinationLng, existing.destinationLng)
+    ) {
+      routeInput.destinationLat = null;
+      routeInput.destinationLng = null;
+    }
+
+    // Recompute the cached road route when an endpoint moved or was renamed
+    // (or it is missing).
+    const routeFields = routeNeedsRebuild(existing, nextShipment) ? await computeRouteFields(routeInput) : null;
 
     const shipment = await prisma.$transaction(async (tx) => {
       const updated = await tx.shipment.update({

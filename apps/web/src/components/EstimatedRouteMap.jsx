@@ -32,8 +32,12 @@ const POINT_STYLES = {
 };
 
 export default function EstimatedRouteMap({ shipment }) {
-  const endpoints = useMemo(() => resolveEndpoints(shipment), [shipment]);
   const storedGeometry = useMemo(() => normalizeGeometry(shipment?.routeGeometry), [shipment?.routeGeometry]);
+  const baseEndpoints = useMemo(() => resolveEndpoints(shipment), [shipment]);
+  // When the server could not resolve the origin/destination names to
+  // coordinates (so the map would otherwise not display), geocode them on the
+  // client as a fallback. Cached, and only runs when an endpoint is missing.
+  const endpoints = useResolvedEndpoints(shipment, baseEndpoints);
 
   // The route polyline renders entirely from data the page already has: the
   // server-computed road route, or a direct line between endpoints. No
@@ -159,6 +163,78 @@ function useLiveFraction(movement) {
   return fraction;
 }
 
+// Resolve the origin/destination to coordinates. Uses what the server already
+// provided; if an endpoint is still missing, geocodes the place name on the
+// client (cached) so the map can render even for admin-entered custom locations.
+function useResolvedEndpoints(shipment, baseEndpoints) {
+  const [resolved, setResolved] = useState(baseEndpoints);
+
+  useEffect(() => {
+    if (baseEndpoints.origin && baseEndpoints.destination) {
+      setResolved(baseEndpoints);
+      return undefined;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const [origin, destination] = await Promise.all([
+        baseEndpoints.origin ?? geocodeName(shipment?.origin),
+        baseEndpoints.destination ?? geocodeName(shipment?.destination)
+      ]);
+      if (!cancelled) {
+        setResolved({ origin: origin ?? null, destination: destination ?? null });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shipment?.origin, shipment?.destination, baseEndpoints.origin, baseEndpoints.destination]);
+
+  return resolved;
+}
+
+async function geocodeName(name) {
+  const query = String(name ?? "").trim();
+  if (!query || typeof window === "undefined") {
+    return null;
+  }
+
+  const cacheKey = `geocode:${query.toLowerCase()}`;
+  try {
+    const cached = JSON.parse(window.localStorage.getItem(cacheKey) ?? "null");
+    if (Array.isArray(cached) && cached.length === 2) {
+      return cached;
+    }
+  } catch {
+    // ignore cache errors
+  }
+
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
+      { headers: { Accept: "application/json" } }
+    );
+    if (!response.ok) {
+      return null;
+    }
+    const data = await response.json();
+    const hit = Array.isArray(data) ? data[0] : null;
+    const position = hit ? toPosition(hit.lat, hit.lon) : null;
+    if (position) {
+      try {
+        window.localStorage.setItem(cacheKey, JSON.stringify(position));
+      } catch {
+        // storage unavailable; the map still works
+      }
+    }
+    return position;
+  } catch {
+    return null;
+  }
+}
+
 function resolveCurrentPosition(shipment, routeLine, liveFraction, endpoints) {
   const movement = shipment?.movement;
 
@@ -199,6 +275,22 @@ function FitMapToRoute({ positions }) {
 
     map.fitBounds(L.latLngBounds(positions), { maxZoom: 8, padding: [48, 48] });
   }, [map, positions]);
+
+  // Leaflet measures its container once at init. On mobile the container is
+  // often measured before the layout/address-bar settles, leaving the map sized
+  // wrong (blank/half tiles, broken zoom). Re-validate the size after mount and
+  // on every viewport change so it renders correctly on phones.
+  useEffect(() => {
+    const invalidate = () => map.invalidateSize({ animate: false });
+    const timers = [setTimeout(invalidate, 150), setTimeout(invalidate, 600)];
+    window.addEventListener("resize", invalidate);
+    window.addEventListener("orientationchange", invalidate);
+    return () => {
+      timers.forEach(clearTimeout);
+      window.removeEventListener("resize", invalidate);
+      window.removeEventListener("orientationchange", invalidate);
+    };
+  }, [map]);
 
   return null;
 }

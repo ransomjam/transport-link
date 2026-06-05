@@ -133,10 +133,18 @@ export async function buildRoute(start, end) {
   }
 }
 
-// Decide whether the cached route must be rebuilt: when it is missing, or when
-// either endpoint coordinate has moved.
+// Decide whether the cached route must be rebuilt: when it is missing, when an
+// endpoint coordinate has moved, or when an endpoint name was changed.
 export function routeNeedsRebuild(existing, next) {
   if (!existing?.routeGeometry || !Array.isArray(existing.routeGeometry) || existing.routeGeometry.length < 2) {
+    return true;
+  }
+
+  // Endpoint renamed (e.g. destination "Florida" -> "Texas").
+  if (next.origin !== undefined && next.origin !== existing.origin) {
+    return true;
+  }
+  if (next.destination !== undefined && next.destination !== existing.destination) {
     return true;
   }
 
