@@ -217,8 +217,8 @@ export function renderReceiptPdf(shipment, stream) {
     ["Pick-up Date", formatDateOnly(shipment.pickupDate)],
     ["Pick-up Time", shipment.pickupTime]
   ]);
-  
-  drawFooter(doc);
+
+  drawBarcodeSection(doc, shipment);
 
   doc.end();
 }
@@ -378,24 +378,113 @@ function drawSectionTitle(doc, title) {
   resetCursor(doc);
 }
 
-function drawFooter(doc) {
-  ensureSpace(doc, 120);
-  doc.y += 30;
-  const y = doc.y;
-  
-  doc.font("Helvetica-Bold").fontSize(10).fillColor(PDF_COLORS.ink).text("AUTHORIZATION & SIGNATURE", PDF_PAGE.left, y);
-  
-  doc.font("Helvetica").fontSize(8).fillColor(PDF_COLORS.text)
-    .text("I hereby confirm that the details provided above are accurate and the shipment complies with all applicable regulations. This waybill serves as a binding agreement for carriage under the standard terms and conditions of Transport-Link.", PDF_PAGE.left, y + 16, { width: pageWidth(doc) });
-    
-  doc.rect(PDF_PAGE.left, y + 60, 200, 1).stroke(PDF_COLORS.border);
-  doc.font("Helvetica-Bold").fontSize(8).fillColor(PDF_COLORS.muted).text("AUTHORIZED SIGNATURE", PDF_PAGE.left, y + 65);
-  
-  doc.rect(PDF_PAGE.left + 250, y + 60, 150, 1).stroke(PDF_COLORS.border);
-  doc.font("Helvetica-Bold").fontSize(8).fillColor(PDF_COLORS.muted).text("DATE", PDF_PAGE.left + 250, y + 65);
-  
+function drawBarcodeSection(doc, shipment) {
+  const barcodeHeight = 58;
+  const sectionHeight = barcodeHeight + 44;
+  ensureSpace(doc, sectionHeight + 24);
+  doc.y += 24;
+  const top = doc.y;
+  const centerX = PDF_PAGE.left + pageWidth(doc) / 2;
+
+  drawBarcode(doc, shipment.trackingId, centerX, top, {
+    height: barcodeHeight,
+    moduleWidth: 1.5,
+    maxWidth: pageWidth(doc) - 20
+  });
+
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(14)
+    .fillColor(PDF_COLORS.ink)
+    .text(String(shipment.trackingId ?? "").toUpperCase(), PDF_PAGE.left, top + barcodeHeight + 10, {
+      width: pageWidth(doc),
+      align: "center",
+      characterSpacing: 4
+    });
+
   const generatedText = `Generated on ${new Date().toUTCString()}`;
-  doc.font("Helvetica").fontSize(7).fillColor(PDF_COLORS.muted).text(generatedText, PDF_PAGE.left, pageBottom(doc) + 10, { width: pageWidth(doc), align: "center" });
+  doc
+    .font("Helvetica")
+    .fontSize(7)
+    .fillColor(PDF_COLORS.muted)
+    .text(generatedText, PDF_PAGE.left, pageBottom(doc) + 10, { width: pageWidth(doc), align: "center" });
+}
+
+// Draw a Code 128 (subset B) barcode centred on `centerX`, starting at `top`.
+function drawBarcode(doc, value, centerX, top, { height = 58, moduleWidth = 1.5, maxWidth } = {}) {
+  const segments = encodeCode128(value);
+  if (!segments.length) {
+    return;
+  }
+
+  const totalModules = segments.reduce((sum, segment) => sum + segment.width, 0);
+  let mw = moduleWidth;
+  if (maxWidth && totalModules * mw > maxWidth) {
+    mw = maxWidth / totalModules;
+  }
+
+  const barcodeWidth = totalModules * mw;
+  let x = centerX - barcodeWidth / 2;
+
+  doc.save();
+  for (const segment of segments) {
+    const segmentWidth = segment.width * mw;
+    if (segment.bar) {
+      doc.rect(x, top, segmentWidth, height).fill("#000000");
+    }
+    x += segmentWidth;
+  }
+  doc.restore();
+}
+
+// Code 128 bar/space width patterns for values 0-105 (Start B = 104).
+const CODE128_PATTERNS = [
+  "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
+  "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
+  "221231", "213212", "223112", "312131", "311222", "321122", "321221", "312212", "322112", "322211",
+  "212123", "212321", "232121", "111323", "131123", "131321", "112313", "132113", "132311", "211313",
+  "231113", "231311", "112133", "112331", "132131", "113123", "113321", "133121", "313121", "211331",
+  "231131", "213113", "213311", "213131", "311123", "311321", "331121", "312113", "312311", "332111",
+  "314111", "221411", "431111", "111224", "111422", "121124", "121421", "141122", "141221", "112214",
+  "112412", "122114", "122411", "142112", "142211", "241211", "221114", "413111", "241112", "134111",
+  "111242", "121142", "121241", "114212", "124112", "124211", "411212", "421112", "421211", "212141",
+  "214121", "412121", "111143", "111341", "131141", "114113", "114311", "411113", "411311", "113141",
+  "114131", "311141", "411131", "211412", "211214", "211232"
+];
+const CODE128_STOP = "2331112";
+
+// Encode text into Code 128 subset B bar/space segments.
+function encodeCode128(text) {
+  const codes = [];
+  for (const ch of String(text ?? "")) {
+    const code = ch.charCodeAt(0);
+    codes.push(code >= 32 && code <= 126 ? code : 63); // non-printable -> '?'
+  }
+  if (!codes.length) {
+    return [];
+  }
+
+  const values = [104]; // Start B
+  for (const code of codes) {
+    values.push(code - 32);
+  }
+  let checksum = 104;
+  codes.forEach((code, index) => {
+    checksum += (code - 32) * (index + 1);
+  });
+  values.push(checksum % 103);
+
+  const segments = [];
+  const pushPattern = (pattern) => {
+    for (let i = 0; i < pattern.length; i += 1) {
+      segments.push({ width: Number(pattern[i]), bar: i % 2 === 0 });
+    }
+  };
+  for (const value of values) {
+    pushPattern(CODE128_PATTERNS[value]);
+  }
+  pushPattern(CODE128_STOP);
+  return segments;
 }
 
 function ensureSpace(doc, height) {
