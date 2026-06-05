@@ -17,10 +17,47 @@ import {
   toLatLng
 } from "./geo.js";
 
+// Geocode a free-text place name: try the offline gazetteer first (instant,
+// always available), then fall back to a network geocoder for anything else.
+async function geocodePlace(label) {
+  const fromGazetteer = lookupPlace(label);
+  if (fromGazetteer) {
+    return fromGazetteer;
+  }
+
+  const query = String(label ?? "").trim();
+  if (!query || !env.GEOCODER_URL) {
+    return null;
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), env.ROUTE_TIMEOUT_MS);
+  try {
+    const url = `${env.GEOCODER_URL}?q=${encodeURIComponent(query)}&format=json&limit=1`;
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: { "User-Agent": "goods-tracking/1.0", Accept: "application/json" }
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const data = await response.json();
+    const hit = Array.isArray(data) ? data[0] : null;
+    return hit ? toLatLng(hit.lat, hit.lon) : null;
+  } catch (error) {
+    if (process.env.NODE_ENV !== "test") {
+      console.warn(`[geocode] lookup failed for "${query}": ${error.message}`);
+    }
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Resolve an endpoint coordinate from explicit lat/lng, falling back to the
-// gazetteer using the free-text label.
-export function resolveEndpoint(lat, lng, label) {
-  return toLatLng(lat, lng) ?? lookupPlace(label);
+// gazetteer and then a network geocoder using the free-text label.
+export async function resolveEndpoint(lat, lng, label) {
+  return toLatLng(lat, lng) ?? (await geocodePlace(label));
 }
 
 async function fetchOsrmRoute(start, end, signal) {

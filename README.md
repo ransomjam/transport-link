@@ -217,7 +217,11 @@ Shipment position is **estimated from time along a fixed road route**, not live 
   on the shipment (`route_geometry`). If the routing server is unreachable, it
   falls back to a direct geodesic line, so the feature never breaks.
 - Endpoint coordinates are taken from the admin-entered lat/lng, or resolved
-  from the place names via a built-in gazetteer when left blank.
+  from the place names — first via a built-in gazetteer, then via a network
+  geocoder (`GEOCODER_URL`, Nominatim by default) so any destination resolves.
+- The map renders entirely from the cached route geometry the page already has
+  (no view-time routing request), and uses CDN-backed basemap tiles, so it loads
+  steadily. Build/geocode happen once at write time, not on every map view.
 - The package's current position is interpolated along that route by elapsed
   time between the departure and expected-delivery dates. It is computed on read
   (no background job) and animated smoothly on the public map. Because the

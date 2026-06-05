@@ -240,10 +240,10 @@ export function lookupPlace(label) {
     if (candidate === normalized) {
       return { lat: place.lat, lng: place.lng };
     }
-    if (
-      !best &&
-      (normalized.includes(candidate.split(" ")[0]) || candidate.includes(normalized))
-    ) {
+    // Whole-phrase substring match in either direction (e.g. "Dallas" ->
+    // "dallas texas"). Avoids false single-token hits such as "New Mexico"
+    // matching "New York". Anything else falls through to network geocoding.
+    if (!best && (candidate.includes(normalized) || normalized.includes(candidate))) {
       best = place;
     }
   }

@@ -4,11 +4,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
 
-const MAP_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-const ROUTING_HOST = "router.project-osrm.org";
+// CDN-backed basemap (CARTO Voyager). Far steadier than the OSM demo tile
+// server, which rate-limits embedded apps and produces intermittent blank tiles.
+const MAP_TILE_URL = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+const MAP_TILE_SUBDOMAINS = "abcd";
+const MAP_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
-// Fallback gazetteer used only when a shipment has no stored coordinates or
-// route geometry (legacy records). The server is the source of truth otherwise.
+// Small fallback gazetteer used only for legacy shipments that have neither
+// stored coordinates nor route geometry. The server is the source of truth.
 const LOCATION_COORDINATES = {
   "atlanta georgia": { lat: 33.749, lng: -84.388 },
   "chicago illinois": { lat: 41.8781, lng: -87.6298 },
@@ -31,57 +35,18 @@ export default function EstimatedRouteMap({ shipment }) {
   const endpoints = useMemo(() => resolveEndpoints(shipment), [shipment]);
   const storedGeometry = useMemo(() => normalizeGeometry(shipment?.routeGeometry), [shipment?.routeGeometry]);
 
-  // The route polyline: prefer the server-computed road route, otherwise fetch
-  // a road route between the two endpoints, otherwise a straight line.
-  const [fetchedRoute, setFetchedRoute] = useState({ status: "idle", positions: [] });
-  const endpointKey = useMemo(() => endpointsKey(endpoints), [endpoints]);
-
-  useEffect(() => {
-    if (storedGeometry.length > 1) {
-      setFetchedRoute({ status: "idle", positions: [] });
-      return undefined;
-    }
-
-    if (!endpoints.origin || !endpoints.destination) {
-      setFetchedRoute({ status: "idle", positions: [] });
-      return undefined;
-    }
-
-    const cached = readCachedRoadRoute(endpointKey);
-    if (cached.length) {
-      setFetchedRoute({ status: "ready", positions: cached });
-      return undefined;
-    }
-
-    const controller = new AbortController();
-    setFetchedRoute({ status: "loading", positions: [] });
-
-    loadRoadRoute([endpoints.origin, endpoints.destination], controller.signal)
-      .then((positions) => {
-        writeCachedRoadRoute(endpointKey, positions);
-        setFetchedRoute({ status: positions.length ? "ready" : "unavailable", positions });
-      })
-      .catch((error) => {
-        if (error.name !== "AbortError") {
-          setFetchedRoute({ status: "unavailable", positions: [] });
-        }
-      });
-
-    return () => controller.abort();
-  }, [endpointKey, storedGeometry.length]);
-
+  // The route polyline renders entirely from data the page already has: the
+  // server-computed road route, or a direct line between endpoints. No
+  // view-time network request, so the map is steady and instant.
   const routeLine = useMemo(() => {
     if (storedGeometry.length > 1) {
       return storedGeometry;
-    }
-    if (fetchedRoute.positions.length > 1) {
-      return fetchedRoute.positions;
     }
     if (endpoints.origin && endpoints.destination) {
       return [endpoints.origin, endpoints.destination];
     }
     return [];
-  }, [storedGeometry, fetchedRoute.positions, endpoints]);
+  }, [storedGeometry, endpoints]);
 
   // Live position of the package, animated client-side from the server window.
   const liveFraction = useLiveFraction(shipment?.movement);
@@ -91,10 +56,7 @@ export default function EstimatedRouteMap({ shipment }) {
   );
 
   const summaries = useMemo(() => buildSummaries(shipment), [shipment]);
-  const markers = useMemo(
-    () => buildMarkers(endpoints, currentPos, summaries),
-    [endpoints, currentPos, summaries]
-  );
+  const markers = useMemo(() => buildMarkers(endpoints, currentPos, summaries), [endpoints, currentPos, summaries]);
 
   const boundsPositions = useMemo(() => {
     const points = [...routeLine];
@@ -115,10 +77,15 @@ export default function EstimatedRouteMap({ shipment }) {
       <div className="h-[360px] overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-200 md:h-[420px]">
         <MapContainer center={center} zoom={6} className="h-full w-full" preferCanvas scrollWheelZoom={false} attributionControl={false}>
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            attribution={MAP_ATTRIBUTION}
             url={MAP_TILE_URL}
+            subdomains={MAP_TILE_SUBDOMAINS}
+            detectRetina
+            crossOrigin="anonymous"
+            keepBuffer={4}
             updateWhenIdle={false}
             updateWhenZooming={false}
+            maxZoom={20}
           />
           <FitMapToRoute positions={boundsPositions} />
           {routeLine.length > 1 ? (
@@ -139,12 +106,6 @@ export default function EstimatedRouteMap({ shipment }) {
           ))}
         </MapContainer>
       </div>
-
-      {fetchedRoute.status === "unavailable" && routeLine.length > 1 ? (
-        <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-amber-200">
-          Showing a direct route line; the detailed road route is temporarily unavailable.
-        </p>
-      ) : null}
 
       <RouteSummary summaries={summaries} />
 
@@ -248,7 +209,7 @@ function FallbackRouteCard({ summaries }) {
       <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-normal text-slate-500">
         <span>Shipment Route</span>
         <span aria-hidden="true">&rarr;</span>
-        <span>Current Location</span>
+        <span>Last Updated Location</span>
       </div>
 
       <RouteSummary summaries={summaries} className="mt-4" />
@@ -275,7 +236,7 @@ function RouteSummary({ summaries, className = "" }) {
 function buildSummaries(shipment) {
   return [
     createSummary("origin", "Origin", shipment?.origin),
-    createSummary("current", "Current Location", shipment?.currentLocation),
+    createSummary("current", "Last Updated Location", shipment?.currentLocation),
     createSummary("destination", "Destination", shipment?.destination)
   ];
 }
@@ -401,69 +362,6 @@ function pointAtFraction(points, fraction) {
   const segLen = distances[segment] - segStart;
   const localT = segLen === 0 ? 0 : (target - segStart) / segLen;
   return lerp(points[segment - 1], points[segment], localT);
-}
-
-async function loadRoadRoute(positions, signal) {
-  const coordinates = positions.map(([lat, lng]) => `${lng},${lat}`).join(";");
-  const params = new URLSearchParams({
-    overview: "full",
-    geometries: "geojson",
-    steps: "false",
-    alternatives: "false",
-    continue_straight: "true"
-  });
-  const response = await fetch(`${getRoutingEndpoint()}/${coordinates}?${params}`, { signal });
-
-  if (!response.ok) {
-    return [];
-  }
-
-  const data = await response.json();
-  const route = data.routes?.[0]?.geometry?.coordinates;
-
-  if (!Array.isArray(route)) {
-    return [];
-  }
-
-  return route.map(([lng, lat]) => toPosition(lat, lng)).filter(Boolean);
-}
-
-function getRoutingEndpoint() {
-  const protocol = typeof window !== "undefined" && window.location.protocol === "https:" ? "https" : "http";
-  return `${protocol}://${ROUTING_HOST}/route/v1/driving`;
-}
-
-function readCachedRoadRoute(routeKey) {
-  if (typeof window === "undefined") {
-    return [];
-  }
-
-  try {
-    const cached = JSON.parse(window.localStorage.getItem(`road-route:${routeKey}`) ?? "[]");
-    if (!Array.isArray(cached)) {
-      return [];
-    }
-    return cached.filter((position) => Array.isArray(position) && position.length === 2 && position.every(Number.isFinite));
-  } catch {
-    return [];
-  }
-}
-
-function writeCachedRoadRoute(routeKey, positions) {
-  if (typeof window === "undefined" || positions.length < 2) {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(`road-route:${routeKey}`, JSON.stringify(positions));
-  } catch {
-    // The map still works if storage is unavailable.
-  }
-}
-
-function endpointsKey(endpoints) {
-  const fmt = (p) => (p ? `${p[0].toFixed(5)},${p[1].toFixed(5)}` : "-");
-  return `${fmt(endpoints.origin)}|${fmt(endpoints.destination)}`;
 }
 
 function lookupCoordinate(location) {

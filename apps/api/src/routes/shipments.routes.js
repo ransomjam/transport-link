@@ -25,8 +25,10 @@ const nullableBool = z.preprocess((value) => {
 // Resolve endpoints from coordinates (or gazetteer) and build the cached road
 // route between them. Returns the columns to persist on the shipment.
 async function computeRouteFields(shipment) {
-  const start = resolveEndpoint(shipment.originLat, shipment.originLng, shipment.origin);
-  const end = resolveEndpoint(shipment.destinationLat, shipment.destinationLng, shipment.destination);
+  const [start, end] = await Promise.all([
+    resolveEndpoint(shipment.originLat, shipment.originLng, shipment.origin),
+    resolveEndpoint(shipment.destinationLat, shipment.destinationLng, shipment.destination)
+  ]);
   const route = await buildRoute(start, end);
 
   return {

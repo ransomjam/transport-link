@@ -16,6 +16,9 @@ const schema = z.object({
   // server; point this at a self-hosted instance for production.
   OSRM_URL: z.string().url().default("https://router.project-osrm.org"),
   ROUTE_TIMEOUT_MS: z.coerce.number().int().positive().default(7000),
+  // Geocoding endpoint for place names not in the built-in gazetteer. Set to an
+  // empty string to disable network geocoding.
+  GEOCODER_URL: z.string().default("https://nominatim.openstreetmap.org/search"),
   SETUP_SECRET: optionalFromEnv(z.string().min(1)),
   SETUP_ADMIN_EMAIL: optionalFromEnv(z.string().email()),
   SETUP_ADMIN_PASSWORD: optionalFromEnv(z.string().min(8))

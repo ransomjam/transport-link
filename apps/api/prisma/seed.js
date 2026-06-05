@@ -13,8 +13,10 @@ const resetAdminPassword = process.env.SEED_ADMIN_RESET_PASSWORD === "true";
 // Resolve endpoints and build the cached road route, mirroring the API so
 // seeded shipments behave exactly like admin-created ones.
 async function withRoute(shipment) {
-  const start = resolveEndpoint(shipment.originLat, shipment.originLng, shipment.origin);
-  const end = resolveEndpoint(shipment.destinationLat, shipment.destinationLng, shipment.destination);
+  const [start, end] = await Promise.all([
+    resolveEndpoint(shipment.originLat, shipment.originLng, shipment.origin),
+    resolveEndpoint(shipment.destinationLat, shipment.destinationLng, shipment.destination)
+  ]);
   const route = await buildRoute(start, end);
 
   return {
