@@ -245,24 +245,31 @@ function drawReceiptHeader(doc, shipment) {
   doc.font("Helvetica").fontSize(8).fillColor(PDF_COLORS.muted)
      .text("123 Logistics Avenue, Global Hub\nsupport@transport-link.com\n+1 (800) 555-0199", left, y + (logoDrawn ? 45 : 30));
 
-  doc
-    .font("Helvetica-Bold")
-    .fontSize(18)
-    .fillColor(PDF_COLORS.ink)
-    .text("WAYBILL / CONSIGNMENT", left + width - rightBoxWidth, y, { width: rightBoxWidth, align: "right" });
+  const boxX = left + width - rightBoxWidth;
 
+  // Title (wraps to two lines). Measure its real height so the tracking box is
+  // placed below it instead of overlapping.
+  const titleText = "WAYBILL / CONSIGNMENT";
+  doc.font("Helvetica-Bold").fontSize(17).fillColor(PDF_COLORS.ink);
+  const titleHeight = doc.heightOfString(titleText, { width: rightBoxWidth, align: "right" });
+  doc.text(titleText, boxX, y, { width: rightBoxWidth, align: "right" });
+
+  const boxY = y + titleHeight + 8;
+  const boxHeight = 46;
   doc
-    .rect(left + width - rightBoxWidth, y + 25, rightBoxWidth, 45)
+    .rect(boxX, boxY, rightBoxWidth, boxHeight)
     .stroke(PDF_COLORS.border)
     .font("Helvetica-Bold")
     .fontSize(8)
     .fillColor(PDF_COLORS.muted)
-    .text("TRACKING NO.", left + width - rightBoxWidth + 8, y + 33, { width: rightBoxWidth - 16, align: "left" })
-    .fontSize(16)
+    .text("TRACKING NO.", boxX + 8, boxY + 8, { width: rightBoxWidth - 16, align: "left" })
+    .fontSize(15)
     .fillColor(PDF_COLORS.ink)
-    .text(shipment.trackingId, left + width - rightBoxWidth + 8, y + 48, { width: rightBoxWidth - 16, align: "right" });
+    .text(shipment.trackingId, boxX + 8, boxY + 22, { width: rightBoxWidth - 16, align: "right" });
 
-  doc.y = y + 90;
+  // Header ends below whichever side is taller (logo/address vs. title/box).
+  const leftBottom = y + (logoDrawn ? 45 : 30) + 34;
+  doc.y = Math.max(boxY + boxHeight, leftBottom) + 14;
   resetCursor(doc);
 }
 
