@@ -159,6 +159,19 @@ export function buildMovementPayload(shipment, nowMs = Date.now()) {
   const autoProgress = shipment.autoProgress !== false;
   const animating = autoProgress && MOVING_STATUSES.has(shipment.currentStatus);
 
+  // Distance comes from the routed road path; speed is the steady pace needed to
+  // cover it within the admin's departure -> expected-delivery window. These let
+  // the marker move proportionally to real distance and time.
+  const distanceM = Number.isFinite(shipment.routeDistanceM) ? shipment.routeDistanceM : null;
+  const windowMs =
+    Number.isFinite(effectiveDepartureMs) && Number.isFinite(effectiveEtaMs) && effectiveEtaMs > effectiveDepartureMs
+      ? effectiveEtaMs - effectiveDepartureMs
+      : null;
+  const speedKmh = distanceM != null && windowMs ? distanceM / 1000 / (windowMs / 3600000) : null;
+  const distanceRemainingM = distanceM != null ? distanceM * (1 - position.fraction) : null;
+  const etaMs = Number.isFinite(effectiveEtaMs) ? effectiveEtaMs : null;
+  const secondsRemaining = windowMs != null ? Math.max(0, Math.round((1 - position.fraction) * (windowMs / 1000))) : null;
+
   return {
     fraction: position.fraction,
     lat: position.lat,
@@ -170,7 +183,11 @@ export function buildMovementPayload(shipment, nowMs = Date.now()) {
     effectiveDepartureMs,
     effectiveEtaMs,
     serverNowMs: nowMs,
-    distanceM: Number.isFinite(shipment.routeDistanceM) ? shipment.routeDistanceM : null,
+    distanceM,
+    distanceRemainingM,
+    speedKmh,
+    secondsRemaining,
+    etaMs,
     durationS: Number.isFinite(shipment.routeDurationS) ? shipment.routeDurationS : null,
     provider: shipment.routeProvider ?? null
   };

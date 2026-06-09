@@ -52,15 +52,16 @@ export default function EstimatedRouteMap({ shipment }) {
     return [];
   }, [storedGeometry, endpoints]);
 
-  // Live position of the package, animated client-side from the server window.
-  const liveFraction = useLiveFraction(shipment?.movement);
+  // Static current position (used for map bounds and the external link). The
+  // visible marker itself is animated continuously by <LiveMarker> below.
   const currentPos = useMemo(
-    () => resolveCurrentPosition(shipment, routeLine, liveFraction, endpoints),
-    [shipment, routeLine, liveFraction, endpoints]
+    () => resolveCurrentPosition(shipment, routeLine, clamp01(shipment?.movement?.fraction ?? 0), endpoints),
+    [shipment, routeLine, endpoints]
   );
 
   const summaries = useMemo(() => buildSummaries(shipment), [shipment]);
-  const markers = useMemo(() => buildMarkers(endpoints, currentPos, summaries), [endpoints, currentPos, summaries]);
+  const endpointMarkers = useMemo(() => buildEndpointMarkers(endpoints, summaries), [endpoints, summaries]);
+  const currentSummary = useMemo(() => summaries.find((summary) => summary.key === "current"), [summaries]);
 
   const boundsPositions = useMemo(() => {
     const points = [...routeLine];
@@ -70,7 +71,7 @@ export default function EstimatedRouteMap({ shipment }) {
     return points;
   }, [routeLine, currentPos]);
 
-  if (!markers.length) {
+  if (!endpointMarkers.length && !currentPos) {
     return <FallbackRouteCard summaries={summaries} />;
   }
 
@@ -98,7 +99,7 @@ export default function EstimatedRouteMap({ shipment }) {
               <Polyline positions={routeLine} pathOptions={{ color: "#1A73E8", opacity: 0.96, weight: 6 }} />
             </>
           ) : null}
-          {markers.map((point) => (
+          {endpointMarkers.map((point) => (
             <Marker key={point.key} icon={createMarkerIcon(point)} position={point.position}>
               <Popup>
                 <div className="min-w-32">
@@ -108,6 +109,13 @@ export default function EstimatedRouteMap({ shipment }) {
               </Popup>
             </Marker>
           ))}
+          {currentSummary && (routeLine.length > 1 || currentPos) ? (
+            <LiveMarker
+              routeLine={routeLine.length > 1 ? routeLine : currentPos ? [currentPos] : []}
+              movement={shipment?.movement}
+              summary={currentSummary}
+            />
+          ) : null}
         </MapContainer>
       </div>
 
@@ -125,42 +133,116 @@ export default function EstimatedRouteMap({ shipment }) {
   );
 }
 
-// Recompute the journey fraction every second from the server-provided window
-// so the marker glides along the route in real time between data refreshes.
-function useLiveFraction(movement) {
-  const [fraction, setFraction] = useState(() => (movement ? clamp01(movement.fraction ?? 0) : 0));
-  // Offset between the client clock and the server clock, captured once.
-  const skewRef = useRef(0);
+// Precompute a polyline's cumulative arc length once, then resolve any fraction
+// (0..1) to a point with a binary search. This keeps per-frame work tiny even
+// for routes with tens of thousands of vertices, so 60fps animation stays smooth.
+function makeRouteSampler(points) {
+  if (!Array.isArray(points) || points.length === 0) {
+    return { total: 0, at: () => null };
+  }
+  if (points.length === 1) {
+    return { total: 0, at: () => points[0] };
+  }
+
+  const cumulative = [0];
+  for (let i = 1; i < points.length; i += 1) {
+    cumulative[i] = cumulative[i - 1] + haversine(points[i - 1], points[i]);
+  }
+  const total = cumulative[cumulative.length - 1];
+
+  const at = (fraction) => {
+    const t = clamp01(fraction);
+    if (total === 0 || t <= 0) {
+      return points[0];
+    }
+    if (t >= 1) {
+      return points[points.length - 1];
+    }
+    const target = t * total;
+    let lo = 1;
+    let hi = cumulative.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (cumulative[mid] < target) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    const segStart = cumulative[lo - 1];
+    const segLen = cumulative[lo] - segStart;
+    const localT = segLen === 0 ? 0 : (target - segStart) / segLen;
+    return lerp(points[lo - 1], points[lo], localT);
+  };
+
+  return { total, at };
+}
+
+// The moving "current location" marker. Instead of stepping once per second, it
+// updates the Leaflet marker imperatively on every animation frame, so the
+// package glides continuously along the route at its real distance/time pace.
+function LiveMarker({ routeLine, movement, summary }) {
+  const markerRef = useRef(null);
+  const sampler = useMemo(() => makeRouteSampler(routeLine), [routeLine]);
+  const initialPosition = useMemo(
+    () => sampler.at(clamp01(movement?.fraction ?? 0)) ?? routeLine[0] ?? [0, 0],
+    [sampler, movement?.fraction, routeLine]
+  );
 
   useEffect(() => {
-    if (!movement) {
+    const marker = markerRef.current;
+    if (!marker) {
       return undefined;
     }
 
-    if (Number.isFinite(movement.serverNowMs)) {
-      skewRef.current = movement.serverNowMs - Date.now();
-    }
+    // Align the client clock to the server clock so all viewers agree on position.
+    const skewMs = Number.isFinite(movement?.serverNowMs) ? movement.serverNowMs - Date.now() : 0;
+    const departure = movement?.effectiveDepartureMs;
+    const eta = movement?.effectiveEtaMs;
+    const canAnimate =
+      Boolean(movement?.animating) &&
+      routeLine.length > 1 &&
+      Number.isFinite(departure) &&
+      Number.isFinite(eta) &&
+      eta > departure;
 
-    const compute = () => {
-      const { effectiveDepartureMs, effectiveEtaMs, animating } = movement;
-      if (!animating || !Number.isFinite(effectiveDepartureMs) || !Number.isFinite(effectiveEtaMs) || effectiveEtaMs <= effectiveDepartureMs) {
-        return clamp01(movement.fraction ?? 0);
+    const liveFraction = () => {
+      if (!canAnimate) {
+        return clamp01(movement?.fraction ?? 0);
       }
-      const serverNow = Date.now() + skewRef.current;
-      return clamp01((serverNow - effectiveDepartureMs) / (effectiveEtaMs - effectiveDepartureMs));
+      const serverNow = Date.now() + skewMs;
+      return clamp01((serverNow - departure) / (eta - departure));
     };
 
-    setFraction(compute());
+    let frame;
+    const tick = () => {
+      const point = sampler.at(liveFraction());
+      if (point) {
+        marker.setLatLng(point);
+      }
+      if (canAnimate) {
+        frame = requestAnimationFrame(tick);
+      }
+    };
+    tick();
 
-    if (!movement.animating) {
-      return undefined;
-    }
+    return () => {
+      if (frame) {
+        cancelAnimationFrame(frame);
+      }
+    };
+  }, [movement, sampler, routeLine.length]);
 
-    const timer = setInterval(() => setFraction(compute()), 1000);
-    return () => clearInterval(timer);
-  }, [movement]);
-
-  return fraction;
+  return (
+    <Marker ref={markerRef} position={initialPosition} icon={createMarkerIcon(summary)} zIndexOffset={1000}>
+      <Popup>
+        <div className="min-w-32">
+          <div className="text-xs font-semibold uppercase tracking-normal text-slate-500">{summary.label}</div>
+          <div className="mt-1 font-semibold text-[#0F2742]">{summary.value}</div>
+        </div>
+      </Popup>
+    </Marker>
+  );
 }
 
 // Resolve the origin/destination to coordinates. Uses what the server already
@@ -343,7 +425,7 @@ function createSummary(key, label, value) {
   };
 }
 
-function buildMarkers(endpoints, currentPos, summaries) {
+function buildEndpointMarkers(endpoints, summaries) {
   const byKey = Object.fromEntries(summaries.map((summary) => [summary.key, summary]));
   const markers = [];
 
@@ -352,10 +434,6 @@ function buildMarkers(endpoints, currentPos, summaries) {
   }
   if (endpoints.destination) {
     markers.push({ ...byKey.destination, position: endpoints.destination });
-  }
-  // Draw the current-location marker last so it sits above the endpoints.
-  if (currentPos) {
-    markers.push({ ...byKey.current, position: currentPos });
   }
 
   return markers;
