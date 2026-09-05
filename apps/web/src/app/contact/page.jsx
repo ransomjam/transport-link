@@ -21,7 +21,7 @@ export default function ContactPage() {
                     Email: {brand.email}
                   </a>
                 ) : null}
-                <p className="font-semibold text-[#0F2742]">Location: USA</p>
+                <p className="font-semibold text-[#0F2742]">Location: USA, Australia</p>
               </div>
             </div>
             <ImagePlaceholder src="/images/home-delivery.jpg" label="Contact logistics experts" className="min-h-[320px]" />

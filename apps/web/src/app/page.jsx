@@ -13,14 +13,14 @@ const homepageImages = {
     src: "/images/customer-service-group.jpeg",
   },
   hero: {
-    src: "/images/customer-support-desk.jpeg",
-    label: "Shipment intake support",
-    position: "center 24%"
+    src: "/images/fleet-tracking.png",
+    label: "GPS fleet tracking",
+    position: "center center"
   },
   registration: {
-    src: "/images/front-desk-support.jpeg",
-    label: "Front desk support",
-    position: "center 20%"
+    src: "/images/route-monitoring.png",
+    label: "Real-time route monitoring",
+    position: "center center"
   },
   support: {
     src: "/images/hero-shipping.jpg",
@@ -79,8 +79,9 @@ export default function HomePage() {
               <ImagePlaceholder
                 src={homepageImages.hero.src}
                 label={homepageImages.hero.label}
+                showBadge={false}
                 className="min-h-[360px] lg:min-h-[560px] rounded-2xl shadow-2xl ring-1 ring-white/10"
-                tone="light"
+                tone="none"
                 position={homepageImages.hero.position}
               >
                 <div className="flex h-full items-end p-5 lg:p-8">
@@ -102,8 +103,9 @@ export default function HomePage() {
             <ImagePlaceholder
               src={homepageImages.registration.src}
               label={homepageImages.registration.label}
+              showBadge={false}
               className="min-h-[340px]"
-              tone="light"
+              tone="none"
               position={homepageImages.registration.position}
             />
             <details className="group border-b border-slate-200 pb-4 [&_summary::-webkit-details-marker]:hidden">

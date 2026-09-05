@@ -1,10 +1,10 @@
 export const brand = {
   name: "transport-link Express",
   shortName: "transport-link",
-  phone: "+(918)8498286",
-  displayPhone: "+(918) 849-8286",
+  phone: "(925) 478-5596",
+  displayPhone: "(925) 478-5596",
   email: "",
-  location: "USA / United States",
+  location: "USA, Australia",
   openingHours: "24H/7",
   logo: "/logo/Logo.png"
 };
