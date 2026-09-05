@@ -13,12 +13,12 @@ const homepageImages = {
     src: "/images/customer-service-group.jpeg",
   },
   hero: {
-    src: "/images/fleet-tracking.png",
+    src: "/images/media-hero.png",
     label: "GPS fleet tracking",
     position: "center center"
   },
   registration: {
-    src: "/images/route-monitoring.png",
+    src: "/images/fleet-tracking.png",
     label: "Real-time route monitoring",
     position: "center center"
   },
@@ -85,7 +85,7 @@ export default function HomePage() {
                 position={homepageImages.hero.position}
               >
                 <div className="flex h-full items-end p-5 lg:p-8">
-                  <div className="max-w-sm rounded-xl bg-white/95 p-6 shadow-xl backdrop-blur-sm ring-1 ring-white/70 sm:-ml-6 sm:translate-y-6">
+                  <div className="max-w-sm rounded-xl bg-white/10 p-6 shadow-xl backdrop-blur-sm ring-1 ring-white/70 sm:-ml-6 sm:translate-y-6">
                     <p className="text-xs font-bold uppercase tracking-wider text-[#049DBF]">Always within reach</p>
                     <p className="mt-2 text-2xl font-bold text-[#0F2742]">24/7 customer support</p>
                     <p className="mt-3 text-sm leading-relaxed text-slate-600">
